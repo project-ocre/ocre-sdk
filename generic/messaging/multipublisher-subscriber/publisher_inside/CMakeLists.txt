@@ -13,12 +13,12 @@ add_compile_options(
 )
 
 # Add the ocre-sdk as a subdirectory and build it
-set(OCRE_API_PATH "../../../../ocre-sdk")
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${OCRE_API_PATH}/CMakeLists.txt")
-    message(FATAL_ERROR "ocre-sdk not found at ${OCRE_API_PATH}. Please ensure the ocre-sdk directory exists and contains CMakeLists.txt")
+set(OCRE_SDK_PATH "../../../../ocre-sdk")
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${OCRE_SDK_PATH}/CMakeLists.txt")
+    message(FATAL_ERROR "ocre-sdk not found at ${OCRE_SDK_PATH}. Please ensure the ocre-sdk directory exists and contains CMakeLists.txt")
 endif()
 
-add_subdirectory(${OCRE_API_PATH} ocre-sdk-build)
+add_subdirectory(${OCRE_SDK_PATH} ocre-sdk-build)
 
 add_executable(${APPNAME}.wasm main.c)
 target_include_directories(${APPNAME}.wasm PRIVATE ocre_api)
