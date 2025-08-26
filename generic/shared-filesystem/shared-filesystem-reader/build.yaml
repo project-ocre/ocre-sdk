@@ -1,0 +1,16 @@
+# @copyright Copyright © contributors to Project Ocre, 
+# which has been established as Project Ocre a Series of LF Projects, LLC
+# SPDX-License-Identifier: Apache-2.0
+# Ocre container image definition for shared filesystem reader
+
+version: '1'
+
+name: shared-filesystem-reader
+binaries:
+  - path: build/shared-filesystem-reader.wasm
+
+config:
+  environment:
+    - Message
+  permissions:
+    - console

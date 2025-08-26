@@ -1,0 +1,16 @@
+# @copyright Copyright © contributors to Project Ocre, 
+# which has been established as Project Ocre a Series of LF Projects, LLC
+# SPDX-License-Identifier: Apache-2.0
+# Ocre container image definition
+
+
+version: '1'
+
+name: echo-server
+binaries:
+  - path: build/echo-server.wasm
+
+config:
+  environment:
+  permissions:
+    - networking

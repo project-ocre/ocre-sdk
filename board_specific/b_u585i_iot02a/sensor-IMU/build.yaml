@@ -1,0 +1,18 @@
+# @copyright Copyright © contributors to Project Ocre, 
+# which has been established as Project Ocre a Series of LF Projects, LLC
+# SPDX-License-Identifier: Apache-2.0
+# Ocre container image definition
+
+version: '1'
+
+name: sensor-imu
+binaries:
+  - path: build/sensor-imu.wasm
+
+config:
+  environment:
+    - INTERVAL=500
+  permissions:
+    - ocre_gpio
+    - ocre_timers
+    - ocre_sensors
