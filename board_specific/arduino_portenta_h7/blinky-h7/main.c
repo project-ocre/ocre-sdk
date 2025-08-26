@@ -9,7 +9,7 @@
 // This example demonstrates a simple blinky application using the Ocre GPIO and timer APIs.
 #include <stdio.h>
 #include <stdbool.h>
-#include "../../../ocre-api/ocre_api.h"
+#include "../../../ocre-sdk/ocre_api.h"
 
 
 // Define the timer ID and interval for the periodic timer

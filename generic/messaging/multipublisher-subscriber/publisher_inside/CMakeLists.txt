@@ -12,13 +12,13 @@ add_compile_options(
     -Wno-unknown-attributes
 )
 
-# Add the ocre-api as a subdirectory and build it
-set(OCRE_API_PATH "../../../../ocre-api")
+# Add the ocre-sdk as a subdirectory and build it
+set(OCRE_API_PATH "../../../../ocre-sdk")
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${OCRE_API_PATH}/CMakeLists.txt")
-    message(FATAL_ERROR "ocre-api not found at ${OCRE_API_PATH}. Please ensure the ocre-api directory exists and contains CMakeLists.txt")
+    message(FATAL_ERROR "ocre-sdk not found at ${OCRE_API_PATH}. Please ensure the ocre-sdk directory exists and contains CMakeLists.txt")
 endif()
 
-add_subdirectory(${OCRE_API_PATH} ocre-api-build)
+add_subdirectory(${OCRE_API_PATH} ocre-sdk-build)
 
 add_executable(${APPNAME}.wasm main.c)
 target_include_directories(${APPNAME}.wasm PRIVATE ocre_api)

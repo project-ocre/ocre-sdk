@@ -25,8 +25,8 @@ add_link_options(
     -Wl,--max-memory=65536      # Maximum size of linear memory
 )
 
-# Add the ocre-api as a subdirectory and build it
-add_subdirectory(../../../ocre-api ocre-api-build)
+# Add the ocre-sdk as a subdirectory and build it
+add_subdirectory(../../../ocre-sdk ocre-sdk-build)
 
 add_executable(${APPNAME}.wasm main.c mongoose.c)
 

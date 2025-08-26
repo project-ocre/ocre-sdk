@@ -7,7 +7,7 @@
  */
 #include <stdio.h>
 #include <stdbool.h>
-#include "../../../ocre-api/ocre_api.h"
+#include "../../../ocre-sdk/ocre_api.h"
 
 // Define the timer ID and interval for the periodic timer
 #define TIMER_ID        1
