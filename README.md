@@ -56,3 +56,32 @@ This will generate a .wasm binary in the build/ directory.
 Repeat the same process for any other sample—whether under generic/ or board_specific/
 
 ## Running with Ocre Runtime
+All compiled .wasm samples are compatible with the [Ocre Runtime](https://github.com/project-ocre/ocre-runtime), which provides a lightweight execution environment for WASI modules.
+
+Example:
+```bash
+app build/hello-world.wasm
+```
+
+## Example Categories
+### Generic Samples
+- blinky
+- hello-world
+- echo-server
+- filesystem, filesystem-full, shared-filesystem
+- webserver
+- messaging: publisher, subscriber, multipublisher-subscriber
+- modbus-client
+- sensor-rng
+### Board-Specific Samples
+- arduino_portenta_h7: blinky-h7
+- b_u585i_iot02a: sensor, sensor-IMU, modbus-server, blinky-xmas, blinky-u585, blinky-button
+These demonstrate hardware-specific integrations while still leveraging the common ocre-api.
+## SDK Highlights
+- Header and source-based SDK (ocre-api)
+- Modular CMake-based build system
+- Runtime execution via Ocre Runtime
+- Extensible for new boards and applications
+
+## Contributing
+Want to add a new board or example? Fork the repo, create your sample under generic/ or board_specific/, and submit a pull request. Contributions are welcome
