@@ -1,0 +1,17 @@
+# @copyright Copyright © contributors to Project Ocre, 
+# which has been established as Project Ocre a Series of LF Projects, LLC
+# SPDX-License-Identifier: Apache-2.0
+# Ocre container image definition
+
+version: '1'
+
+name: modbus-server-u585
+binaries:
+  - path: build/modbus-server.wasm
+
+config:
+  permissions:
+    - networking
+    - ocre_sensors
+    - ocre_gpio
+    - ocre_timers
