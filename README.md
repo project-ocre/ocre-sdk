@@ -42,6 +42,12 @@ Make sure the ocre-api folder is accessible to your build system.
 ## Building with wasi-sdk
 All examples are designed to compile to .wasm using [wasi-sdk](https://github.com/WebAssembly/wasi-sdk).
 
+> **Note:** By default, we expect the WASI SDK toolchain file to be located at:
+>
+> `/opt/wasi-sdk/share/cmake/wasi-sdk.cmake`
+>
+> This is typically set in each sample's `CMakeLists.txt`. You can modify this path as needed for your environment.
+
 ### Build Instructions
 Each sample can be built independently. Here's a generic flow
 
