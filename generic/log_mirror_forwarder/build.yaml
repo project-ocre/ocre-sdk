@@ -1,0 +1,12 @@
+# Copyright (C) 2025 Atym Incorporated. All rights reserved.
+# Atym container image definition
+
+version: '1'
+
+name: syslog_webserver
+binaries:
+  - path: build/syslog_webserver.wasm
+
+config:
+  permissions:
+    - networking

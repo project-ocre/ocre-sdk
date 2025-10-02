@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>System Log</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#0e1428;--edge:#303a60;--ink:#e6e6e6;--accent:#8fb2ff;--btn:#1a2350}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:1rem;background:var(--bg);color:var(--ink)}
+    h1{font-size:1.1rem;margin:0 0 .75rem 0}
+    .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    label{font-size:.9rem;opacity:.9}
+    input,button{background:var(--panel);border:1px solid var(--edge);border-radius:8px;color:var(--ink);padding:.35rem .6rem}
+    input{width:13rem}
+    button{background:var(--btn);cursor:pointer}
+    #status{font-size:.9rem;opacity:.85}
+    #wrap{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:10px;max-height:70vh;overflow:auto}
+    a{color:var(--accent)}
+    .badge{display:inline-flex;align-items:center;gap:.35rem;padding:.15rem .45rem;border:1px solid var(--edge);border-radius:999px}
+    .dot{width:.55rem;height:.55rem;border-radius:50%}
+    .ok{background:#21c25e}
+    .no{background:#e94b4b}
+    .maybe{background:#f1c232}
+  </style>
+</head>
+<body>
+  <h1>System Log <small>(last 200 lines)</small></h1>
+
+  <div class="row" id="cfg">
+    <label>MQTT host</label>
+    <input id="host" placeholder="127.0.0.1" />
+    <label>Port</label>
+    <input id="port" type="number" min="1" max="65535" placeholder="1883" style="width:7rem" />
+    <button id="connect">Connect</button>
+    <span id="status" class="badge"><span class="dot maybe"></span><span id="statusText">checking…</span></span>
+    <a href="/download" title="Download raw file">Download</a>
+  </div>
+
+  <div id="wrap">Loading…</div>
+
+  <script>
+    const wrap = document.getElementById('wrap');
+    const MAX = 200;
+    const buffer = [];
+
+    const hostEl = document.getElementById('host');
+    const portEl = document.getElementById('port');
+    const btn = document.getElementById('connect');
+    const statusBadge = document.getElementById('status');
+    const statusText = document.getElementById('statusText');
+
+    function setBadge(state, text){
+      statusText.textContent = text;
+      statusBadge.querySelector('.dot').className = 'dot ' + (state==='ok'?'ok':state==='no'?'no':'maybe');
+    }
+
+    async function getStatus() {
+      try {
+        const r = await fetch('/status', {cache:'no-store'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const s = await r.json();
+        if (!hostEl.value) hostEl.value = s.mqtt_host || '';
+        if (!portEl.value) portEl.value = s.mqtt_port || '';
+        setBadge(s.mqtt_ready ? 'ok' : 'no', s.mqtt_ready ? 'MQTT connected' : 'MQTT not connected');
+      } catch(e) {
+        setBadge('maybe', 'status unavailable');
+      }
+    }
+
+    async function configure() {
+      const host = hostEl.value.trim() || '127.0.0.1';
+      const port = parseInt(portEl.value || '1883', 10);
+      btn.disabled = true;
+      setBadge('maybe', 'connecting…');
+      try {
+        const r = await fetch('/config', {
+          method: 'POST',
+          headers: {'Content-Type':'application/x-www-form-urlencoded'},
+          body: `host=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}`
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      } catch(e) {
+        setBadge('no', 'connect failed');
+      } finally {
+        btn.disabled = false;
+        // give the server a moment to dial the broker, then refresh status
+        setTimeout(getStatus, 400);
+      }
+    }
+
+    function renderAppend(lines) {
+      for (const ln of lines) buffer.push(ln);
+      if (buffer.length > MAX) buffer.splice(0, buffer.length - MAX);
+      wrap.textContent = buffer.join('');
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+
+    async function loadInitial() {
+      const r = await fetch('/log', {cache:'no-store'});
+      const text = await r.text();
+      const parts = text.length ? text.split('\n') : [];
+      if (parts.length && parts[parts.length-1] === '') parts.pop(); // drop trailing empty from split
+      renderAppend(parts.map(s => s + '\n'));
+    }
+
+    function openWS() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.onmessage = (ev) => {
+        const data = (typeof ev.data === 'string') ? ev.data : '';
+        // Defensive split in case multiple lines arrive together
+        const lines = data.split('\n');
+        if (lines.length && lines[lines.length-1] === '') lines.pop();
+        renderAppend(lines.map(s => s + '\n'));
+      };
+      ws.onclose = () => setTimeout(openWS, 1000);
+    }
+
+    // Wire UI
+    btn.addEventListener('click', configure);
+
+    // Start
+    (async function start(){
+      await getStatus();
+      setInterval(getStatus, 2000);
+      await loadInitial();   // last 200 lines
+      openWS();              // stream new whole lines
+    })();
+  </script>
+</body>
+</html>
