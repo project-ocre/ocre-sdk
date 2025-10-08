@@ -29,7 +29,14 @@ static void serve_home_page(struct mg_connection *c) {
 #ifdef EMBEDDED_MODE
   time_t uptime = time(NULL) - start_time;
   mg_http_reply(c, 200, "Content-Type: text/html\r\n",
-    "<html><head><title>OCRE Server</title></head><body>"
+    "<html><head><title>OCRE Server</title>"
+    "<style>"
+    "body{margin:20px;font-family:Arial;background:#f8f9fa;color:#333;}"
+    "h1{color:#2c3e50;text-align:center;}"
+    "button{padding:8px 15px;background:#007bff;color:white;border:none;border-radius:3px;margin:5px;}"
+    "a{color:#007bff;text-decoration:none;margin:0 10px;}"
+    "</style>"
+    "</head><body>"
     "<h1>OCRE Embedded Server</h1>"
     "<p>Counter: %u</p>"
     "<p>Uptime: %ld seconds</p>"
@@ -124,7 +131,13 @@ static void serve_status_page(struct mg_connection *c) {
   time_t uptime = time(NULL) - start_time;
 #ifdef EMBEDDED_MODE
   mg_http_reply(c, 200, "Content-Type: text/html\r\n",
-    "<html><head><title>Status</title></head><body>"
+    "<html><head><title>Status</title>"
+    "<style>"
+    "body{margin:20px;font-family:Arial;background:#f8f9fa;color:#333;}"
+    "h1{color:#28a745;text-align:center;}"
+    "a{color:#007bff;text-decoration:none;}"
+    "</style>"
+    "</head><body>"
     "<h1>System Status</h1>"
     "<p>Uptime: %ld seconds</p>"
     "<p>Counter: %u</p>"
@@ -201,19 +214,18 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
       mg_http_reply(c, 302, "Location: /\r\n", "");
     } else if (mg_match(hm->uri, mg_str("/websocket"), NULL)) {
       mg_http_reply(c, 200, "Content-Type: text/html\r\n",
-        "<html><head><title>WebSocket Test</title></head><body>"
+        "<html><head><title>WebSocket</title></head><body>"
         "<h1>WebSocket Test</h1>"
-        "<div id='status'>Disconnected</div>"
-        "<input type='text' id='msg' placeholder='Message'>"
+        "<p>Status: <span id='status'>Connecting...</span></p>"
+        "<input type='text' id='msg'>"
         "<button onclick='send()'>Send</button>"
         "<div id='log'></div>"
         "<script>"
         "var ws = new WebSocket('ws://' + location.host + '/ws');"
-        "var log = document.getElementById('log');"
         "ws.onopen = function() { document.getElementById('status').innerHTML = 'Connected'; };"
         "ws.onclose = function() { document.getElementById('status').innerHTML = 'Disconnected'; };"
-        "ws.onmessage = function(e) { log.innerHTML += '<div>Echo: ' + e.data + '</div>'; };"
-        "function send() { var msg = document.getElementById('msg'); ws.send(msg.value); msg.value = ''; }"
+        "ws.onmessage = function(e) { document.getElementById('log').innerHTML += '<div>' + e.data + '</div>'; };"
+        "function send() { var msg = document.getElementById('msg'); if(ws.readyState === 1 && msg.value) { ws.send(msg.value); msg.value = ''; } }"
         "</script></body></html>");
     } else if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
       // Simple WebSocket upgrade for embedded
