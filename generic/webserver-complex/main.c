@@ -6,40 +6,40 @@
 #define HTTP_PORT "8000"
 #define LISTEN_ADDRESS "http://0.0.0.0:" HTTP_PORT
 
+// Uncomment for embedded systems with limited resources
+#define EMBEDDED_MODE
+
 unsigned int counter = 0;
 time_t start_time;
 
-// CSS styles embedded in C string
+// Simplified CSS for embedded systems
 static const char* css_styles = 
-  "body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; "
-       "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }"
-  ".container { max-width: 800px; margin: 0 auto; background: rgba(255,255,255,0.1); "
-              "border-radius: 15px; padding: 30px; backdrop-filter: blur(10px); }"
-  "h1 { text-align: center; font-size: 2.5em; margin-bottom: 30px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }"
-  ".card { background: rgba(255,255,255,0.2); border-radius: 10px; padding: 20px; margin: 20px 0; }"
-  ".counter { font-size: 3em; text-align: center; color: #FFD700; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }"
-  ".button { background: #4CAF50; color: white; border: none; padding: 10px 20px; "
-           "border-radius: 5px; cursor: pointer; margin: 5px; font-size: 16px; }"
-  ".button:hover { background: #45a049; }"
-  ".status { display: flex; justify-content: space-between; flex-wrap: wrap; }"
-  ".status-item { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; "
-                "margin: 5px; flex: 1; min-width: 200px; text-align: center; }"
-  ".nav { text-align: center; margin: 20px 0; }"
-  ".nav a { color: white; text-decoration: none; margin: 0 15px; padding: 10px 20px; "
-           "background: rgba(255,255,255,0.2); border-radius: 25px; }"
-  ".nav a:hover { background: rgba(255,255,255,0.3); }"
-  "#ws-status { color: #FFD700; font-weight: bold; }"
-  "#messages { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; "
-             "height: 200px; overflow-y: auto; margin: 10px 0; }";
+  "body{font-family:Arial;margin:20px;background:#2c3e50;color:white;}"
+  ".container{max-width:600px;margin:0 auto;padding:20px;}"
+  "h1{text-align:center;color:#3498db;}"
+  ".card{background:#34495e;padding:20px;margin:20px 0;border-radius:5px;}"
+  ".counter{font-size:2em;text-align:center;color:#f39c12;}"
+  ".button{background:#27ae60;color:white;border:none;padding:10px 20px;margin:5px;cursor:pointer;}"
+  ".nav{text-align:center;margin:20px 0;}"
+  ".nav a{color:#3498db;text-decoration:none;margin:0 15px;}"
+  ".status{text-align:center;}"
+  "#messages{background:#2c3e50;padding:10px;height:150px;overflow-y:auto;border:1px solid #555;}";
 
 static void serve_home_page(struct mg_connection *c) {
+#ifdef EMBEDDED_MODE
   time_t uptime = time(NULL) - start_time;
-  mg_printf(c,
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Transfer-Encoding: chunked\r\n\r\n");
-  
-  mg_http_printf_chunk(c,
+  mg_http_reply(c, 200, "Content-Type: text/html\r\n",
+    "<html><head><title>OCRE Server</title></head><body>"
+    "<h1>OCRE Embedded Server</h1>"
+    "<p>Counter: %u</p>"
+    "<p>Uptime: %ld seconds</p>"
+    "<p><a href='/status'>Status</a> | <a href='/api/counter'>API</a> | <a href='/websocket'>WebSocket</a></p>"
+    "<form method='POST' action='/increment' style='display:inline;'><button>+</button></form>"
+    "<form method='POST' action='/reset' style='display:inline;'><button>Reset</button></form>"
+    "</body></html>", counter, (long)uptime);
+#else
+  time_t uptime = time(NULL) - start_time;
+  mg_http_reply(c, 200, "Content-Type: text/html\r\n",
     "<!DOCTYPE html>"
     "<html lang='en'>"
     "<head>"
@@ -110,27 +110,29 @@ static void serve_home_page(struct mg_connection *c) {
             ".then(data => {"
               "document.getElementById('uptime').textContent = data.uptime + ' seconds';"
             "})"
-            ".catch(e => console.log('Uptime update failed:', e));"
+            ".catch(e => {});" // Simplified error handling
         "}"
-        "connectWebSocket();"
-        "updateUptime(); setInterval(updateUptime, 1000);" // Update every second
-        "setInterval(() => { if(ws && ws.readyState === WebSocket.OPEN) "
-                           "ws.send(JSON.stringify({type: 'ping'})); }, 30000);"
+        "try { connectWebSocket(); } catch(e) {}" // Graceful WebSocket failure
+        "updateUptime(); setInterval(updateUptime, 5000);" // Update every 5 seconds instead of 1
       "</script>"
     "</body>"
     "</html>", css_styles, counter, uptime, HTTP_PORT);
-  
-  mg_http_printf_chunk(c, "");
+#endif
 }
 
 static void serve_status_page(struct mg_connection *c) {
   time_t uptime = time(NULL) - start_time;
-  mg_printf(c,
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Transfer-Encoding: chunked\r\n\r\n");
-  
-  mg_http_printf_chunk(c,
+#ifdef EMBEDDED_MODE
+  mg_http_reply(c, 200, "Content-Type: text/html\r\n",
+    "<html><head><title>Status</title></head><body>"
+    "<h1>System Status</h1>"
+    "<p>Uptime: %ld seconds</p>"
+    "<p>Counter: %u</p>"
+    "<p>Port: %s</p>"
+    "<p><a href='/'>Back</a></p>"
+    "</body></html>", (long)uptime, counter, HTTP_PORT);
+#else
+  mg_http_reply(c, 200, "Content-Type: text/html\r\n",
     "<!DOCTYPE html>"
     "<html><head><title>System Status</title><style>%s</style></head>"
     "<body><div class='container'>"
@@ -144,17 +146,11 @@ static void serve_status_page(struct mg_connection *c) {
       "<p><strong>Build Time:</strong> %s %s</p>"
     "</div></div></body></html>", 
     css_styles, (long)uptime, counter, HTTP_PORT, __DATE__, __TIME__);
-  
-  mg_http_printf_chunk(c, "");
+#endif
 }
 
 static void serve_websocket_demo(struct mg_connection *c) {
-  mg_printf(c,
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Transfer-Encoding: chunked\r\n\r\n");
-  
-  mg_http_printf_chunk(c,
+  mg_http_reply(c, 200, "Content-Type: text/html\r\n",
     "<!DOCTYPE html>"
     "<html><head><title>WebSocket Demo</title><style>%s</style></head>"
     "<body><div class='container'>"
@@ -183,8 +179,6 @@ static void serve_websocket_demo(struct mg_connection *c) {
         "if(e.key === 'Enter') sendMessage();"
       "});"
     "</script></body></html>", css_styles);
-  
-  mg_http_printf_chunk(c, "");
 }
 
 static void fn(struct mg_connection *c, int ev, void *ev_data) {
@@ -192,10 +186,43 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
     struct mg_http_message *hm = (struct mg_http_message *) ev_data;
     
     if (mg_match(hm->uri, mg_str("/"), NULL)) {
-      counter++; // Increment on home page visit
+#ifndef EMBEDDED_MODE
+      counter++; // Only increment on home page visit in desktop mode
+#endif
       serve_home_page(c);
     } else if (mg_match(hm->uri, mg_str("/status"), NULL)) {
       serve_status_page(c);
+#ifdef EMBEDDED_MODE
+    } else if (mg_match(hm->uri, mg_str("/increment"), NULL)) {
+      counter++;
+      mg_http_reply(c, 302, "Location: /\r\n", "");
+    } else if (mg_match(hm->uri, mg_str("/reset"), NULL)) {
+      counter = 0;
+      mg_http_reply(c, 302, "Location: /\r\n", "");
+    } else if (mg_match(hm->uri, mg_str("/websocket"), NULL)) {
+      mg_http_reply(c, 200, "Content-Type: text/html\r\n",
+        "<html><head><title>WebSocket Test</title></head><body>"
+        "<h1>WebSocket Test</h1>"
+        "<div id='status'>Disconnected</div>"
+        "<input type='text' id='msg' placeholder='Message'>"
+        "<button onclick='send()'>Send</button>"
+        "<div id='log'></div>"
+        "<script>"
+        "var ws = new WebSocket('ws://' + location.host + '/ws');"
+        "var log = document.getElementById('log');"
+        "ws.onopen = function() { document.getElementById('status').innerHTML = 'Connected'; };"
+        "ws.onclose = function() { document.getElementById('status').innerHTML = 'Disconnected'; };"
+        "ws.onmessage = function(e) { log.innerHTML += '<div>Echo: ' + e.data + '</div>'; };"
+        "function send() { var msg = document.getElementById('msg'); ws.send(msg.value); msg.value = ''; }"
+        "</script></body></html>");
+    } else if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
+      // Simple WebSocket upgrade for embedded
+      mg_ws_upgrade(c, hm, NULL);
+    } else if (mg_match(hm->uri, mg_str("/api/counter"), NULL)) {
+      time_t current_uptime = time(NULL) - start_time;
+      mg_http_reply(c, 200, "Content-Type: application/json\r\n", 
+                   "{\"counter\": %u, \"uptime\": %ld}", counter, (long)current_uptime);
+#else
     } else if (mg_match(hm->uri, mg_str("/websocket"), NULL)) {
       serve_websocket_demo(c);
     } else if (mg_match(hm->uri, mg_str("/ws"), NULL)) {
@@ -223,13 +250,14 @@ static void fn(struct mg_connection *c, int ev, void *ev_data) {
       mg_http_reply(c, 200, "Content-Type: application/json\r\n", 
                    "{\"counter\": %u, \"uptime\": %ld, \"port\": \"%s\", \"start_time\": %ld}", 
                    counter, (long)current_uptime, HTTP_PORT, (long)start_time);
+#endif
     } else {
       mg_http_reply(c, 404, "Content-Type: text/html\r\n", 
                    "<html><body><h1>404 - Page Not Found</h1><a href='/'>Go Home</a></body></html>");
     }
   } else if (ev == MG_EV_WS_MSG) {
     struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-    // Echo back the message, or send counter updates
+    // Simple echo for both embedded and desktop modes
     mg_ws_send(c, wm->data.buf, wm->data.len, WEBSOCKET_OP_TEXT);
   }
 }
@@ -243,24 +271,45 @@ int main(void) {
   mg_http_listen(&mgr, LISTEN_ADDRESS, fn, NULL); // Create HTTP listener
 
   printf("\n>> ===============================================\n");
-  printf("    OCRE Embedded Web Server - Enhanced Demo\n");
+#ifdef EMBEDDED_MODE
+  printf("    OCRE Embedded Web Server - Embedded Mode\n");
+#else
+  printf("    OCRE Embedded Web Server - Enhanced Mode\n");
+#endif
   printf("=============================================== <<\n");
   printf("[*] Server Status: ONLINE\n");
   printf("[*] Listening on port: %s\n", HTTP_PORT);
   printf("[*] Started: %s", ctime(&start_time));
+#ifdef EMBEDDED_MODE
+  printf("[*] Mode: EMBEDDED (lightweight)\n");
+#else
+  printf("[*] Mode: ENHANCED (full features)\n");
+#endif
   printf("===============================================\n");
   printf("[+] Available endpoints:\n");
-  printf("   - http://<IP>:%s/         - Main dashboard\n", HTTP_PORT);
+  printf("   - http://<IP>:%s/         - Main page\n", HTTP_PORT);
   printf("   - http://<IP>:%s/status   - System status\n", HTTP_PORT);
   printf("   - http://<IP>:%s/websocket - WebSocket demo\n", HTTP_PORT);
   printf("   - http://<IP>:%s/api/counter - Counter JSON API\n", HTTP_PORT);
+#ifdef EMBEDDED_MODE
+  printf("   - http://<IP>:%s/increment - Increment counter\n", HTTP_PORT);
+  printf("   - http://<IP>:%s/reset     - Reset counter\n", HTTP_PORT);
+#else
   printf("   - http://<IP>:%s/api/status  - Status JSON API\n", HTTP_PORT);
+#endif
   printf("===============================================\n");
   printf("[!] Features:\n");
+#ifdef EMBEDDED_MODE
+  printf("   + Simple HTML interface\n");
+  printf("   + Form-based interactions\n");
+  printf("   + Basic WebSocket support\n");
+  printf("   + Minimal resource usage\n");
+#else
   printf("   + Responsive web interface\n");
   printf("   + Real-time WebSocket communication\n");
   printf("   + RESTful API endpoints\n");
   printf("   + Interactive counter controls\n");
+#endif
   printf("===============================================\n");
   fflush(stdout);
 
