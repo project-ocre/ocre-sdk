@@ -1,1 +1,1 @@
-iwasm --addr-pool=0.0.0.0/0 build/webserver.wasm
+iwasm --addr-pool=0.0.0.0/0 build/webserver-complex.wasm

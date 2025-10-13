@@ -5,9 +5,9 @@
 
 version: '1'
 
-name: webserver
+name: webserver-complex
 binaries:
-  - path: build/webserver.wasm
+  - path: build/webserver-complex.wasm
 
 config:
   permissions:

@@ -5,7 +5,7 @@ set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake)
 
 set(CMAKE_BUILD_TYPE Release)
 
-set(APPNAME webserver)
+set(APPNAME webserver-complex)
 project(${APPNAME})
 
 # Include the WAMR socket library CMake file (adjust path as needed)
