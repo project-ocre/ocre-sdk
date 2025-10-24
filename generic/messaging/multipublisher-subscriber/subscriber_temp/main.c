@@ -16,6 +16,7 @@ void message_handler(const char *topic, const char *content_type, const void *pa
 // WASM entry point
 int main(void)
 {
+  setvbuf(stdout, NULL, _IONBF, 0); 
   int ret = ocre_register_message_callback(TOPIC, message_handler);
   if (ret != OCRE_SUCCESS)
   {
