@@ -18,15 +18,16 @@ static void generic_blink_function(void)
     static bool blink_state = false;
 
     printf("blink (count: %d, state: %s)\n",
-           ++blink_count, blink_state ? "ON" : "OFF");
+           ++blink_count, blink_state ? "+" : "-");
 
     blink_state = !blink_state;
 }
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0); 
     const int timer_id = 1;
-    int interval_ms = 500; // 0.5 second blink
+    int interval_ms = 1000; // 1 second blink
     bool is_periodic = true;
 
     printf("=== Generic Blinky Example (Printf Only) ===\n");
