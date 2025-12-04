@@ -1,46 +1,38 @@
 cmake_minimum_required(VERSION 3.20.0)
 
-# Set the WASI SDK toolchain file
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake)
-
-# Set build type to Release
-set(CMAKE_BUILD_TYPE Release)
-
-# Project name
+# Project name / languages
 set(APPNAME edge-impulse-standalone)
-project(${APPNAME})
+project(${APPNAME} C CXX)
 
-# Set compilation flags
-add_compile_options(
-    # --target=wasm32-wasi
-    -Os                               # 155k size
-    # -O3                               # 188k size
-    -DNDEBUG
-    -Wall
-    -DEI_PORTING_POSIX=1              # Force POSIX port for Wasm
-    -DUSE_CMSIS_NN=OFF                # Wasm does not support CMSIS instructions
-    -DEI_LOG_LEVEL=4                  # Debug logging
-    -DTF_LITE_DISABLE_X86_NEON=1      # Disable x86 NEON optimizations - prob not needed?
-    -DEIDSP_SIGNAL_C_FN_POINTER=1     # Using the C library - required parameter
-    -DEI_C_LINKAGE=1                  # Using the C library - required parameter
-    -fno-exceptions                   # Exceptions not supported in Wasm
-    -Wno-strict-aliasing
-    -Wno-unknown-attributes
-    -I${CMAKE_SOURCE_DIR}
-)
+# ------------------------------------------------------------
+# Options
+# ------------------------------------------------------------
 
-# Set C++ standard for C++ files
+# When ON, build a WASI/WASM binary. When OFF, build a native binary.
+option(BUILD_WASM "Build WASM/WASI binary (requires WASI SDK toolchain)" OFF)
+
+# Optional CMSIS-NN sources (same as your original file)
+option(USE_CMSIS_NN "Enable CMSIS-NN optimizations" OFF)
+
+# ------------------------------------------------------------
+# Common settings
+# ------------------------------------------------------------
+
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set linker flags
-add_link_options(
-    -Wl,--strip-all
-    -Wl,--allow-undefined
-    -lm
+# Common preprocessor definitions shared between native & WASM
+set(COMMON_DEFINES
+    EI_PORTING_POSIX=1              # Force POSIX port for WASI compatibility
+    USE_CMSIS_NN=OFF                # Default OFF since WASI does not support
+    EI_LOG_LEVEL=4
+    TF_LITE_DISABLE_X86_NEON=1
+    EIDSP_SIGNAL_C_FN_POINTER=1
+    EI_C_LINKAGE=1
 )
 
-# Define source files (mirroring Makefile)
+# Source lists (same structure as your original CMake)
 set(CSOURCES
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/tensorflow/lite/c/common.c
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/Source/BasicMathFunctions/*.c
@@ -71,15 +63,15 @@ set(APP_CSOURCES
     ${CMAKE_SOURCE_DIR}/source/main.c
 )
 
-# Optional CMSIS-NN sources
-option(USE_CMSIS_NN "Enable CMSIS-NN optimizations" OFF)
 if(USE_CMSIS_NN)
-    add_compile_options(
-        -DEI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
-        -D__ARM_FEATURE_DSP=1
-        -D__GNUC_PYTHON__=1
-        -I${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Include/
-        -I${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/PrivateInclude/
+    list(APPEND COMMON_DEFINES
+        EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
+        __ARM_FEATURE_DSP=1
+        __GNUC_PYTHON__=1
+    )
+    include_directories(
+        ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Include/
+        ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/PrivateInclude/
     )
     list(APPEND CSOURCES
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Source/ActivationFunctions/*.c
@@ -94,13 +86,65 @@ if(USE_CMSIS_NN)
     )
 endif()
 
-# Glob source files
+# Glob the sources
 file(GLOB CSOURCE_FILES ${CSOURCES})
 file(GLOB CXXSOURCE_FILES ${CXXSOURCES})
 file(GLOB APP_CSOURCE_FILES ${APP_CSOURCES})
 
-# Create executable
-add_executable(${APPNAME}.wasm ${CSOURCE_FILES} ${CXXSOURCE_FILES} ${APP_CSOURCE_FILES})
+set(ALL_SOURCES
+    ${CSOURCE_FILES}
+    ${CXXSOURCE_FILES}
+    ${APP_CSOURCE_FILES}
+)
 
-# Link libraries (math library included via add_link_options)
-target_link_libraries(${APPNAME}.wasm PRIVATE m)
+# ------------------------------------------------------------
+# WASM / Native targets
+# ------------------------------------------------------------
+
+if(BUILD_WASM)
+
+    add_executable(${APPNAME}.wasm ${ALL_SOURCES})
+
+    target_compile_definitions(${APPNAME}.wasm PRIVATE ${COMMON_DEFINES})
+
+    target_compile_options(${APPNAME}.wasm PRIVATE
+        -Os
+        -DNDEBUG
+        -Wall
+        -fno-exceptions
+        -Wno-strict-aliasing
+        -Wno-unknown-attributes
+        -I${CMAKE_SOURCE_DIR}
+    )
+
+    # Linker options specific to WASI / WASM
+    target_link_options(${APPNAME}.wasm PRIVATE
+        -Wl,--strip-all
+        -Wl,--allow-undefined
+        -lm
+    )
+
+    target_link_libraries(${APPNAME}.wasm PRIVATE m)
+
+else()
+    # Native build
+    add_executable(${APPNAME} ${ALL_SOURCES})
+
+    target_compile_definitions(${APPNAME} PRIVATE ${COMMON_DEFINES})
+
+    target_compile_options(${APPNAME} PRIVATE
+        -Os
+        -DNDEBUG
+        -Wall
+        -Wno-strict-aliasing
+        -I${CMAKE_SOURCE_DIR}
+    )
+
+    target_link_options(${APPNAME} PRIVATE
+        -Wl,--strip-all    
+        -lm
+    )
+
+    target_link_libraries(${APPNAME} PRIVATE m)
+
+endif()
