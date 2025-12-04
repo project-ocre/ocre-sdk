@@ -2,3 +2,6 @@
 	path = wasm-micro-runtime
 	url = https://github.com/project-ocre/wasm-micro-runtime.git
 	branch = staging
+[submodule "generic/edge-impulse/motion-classifier/edge-impulse-sdk"]
+	path = generic/edge-impulse/motion-classifier/edge-impulse-sdk
+	url = https://github.com/edgeimpulse/inferencing-sdk-cpp.git

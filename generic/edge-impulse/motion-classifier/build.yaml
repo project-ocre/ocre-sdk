@@ -1,0 +1,12 @@
+# Copyright (C) 2025 Atym Incorporated. All rights reserved.
+# Atym container image definition
+
+version: '1'
+
+name: ei-motion-model
+binaries:
+  - path: build/edge-impulse-standalone.wasm
+
+config:
+  permissions:
+    - networking
