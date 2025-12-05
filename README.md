@@ -28,7 +28,7 @@ Each sample includes:
 To get started with the full example suite:
 
 ```bash
-git clone --recursive https://github.com/project-ocre/getting-started.git
+git clone --recursive https://github.com/project-ocre/ocre-sdk.git
 ```
 
 Or add the SDK as a submodule to your own project:
