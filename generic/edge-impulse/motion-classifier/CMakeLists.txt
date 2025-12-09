@@ -120,6 +120,7 @@ set(CLASSIFIER_SOURCES
 # Data container main + QCBOR only
 set(DATA_APP_CSOURCES
     ${CMAKE_SOURCE_DIR}/container-data/main.c
+    ${CMAKE_SOURCE_DIR}/container-data/ei_cbor_decoder.c
 )
 file(GLOB DATA_APP_FILES ${DATA_APP_CSOURCES})
 
