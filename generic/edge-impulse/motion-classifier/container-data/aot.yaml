@@ -1,0 +1,10 @@
+aotConfigs:
+- cpu: cortex-m33
+  target: thumbv8m.main
+  targetAbi: eabihf
+- cpu: cortex-m7
+  target: thumbv7em
+  targetAbi: eabihf
+- cpu: cortex-a76
+  target: aarch64v8
+  targetAbi: gnu

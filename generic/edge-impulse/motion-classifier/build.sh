@@ -68,6 +68,26 @@ clean() {
     echo
 }
 
+build_atym() {
+    echo "=== Building for ATYM ==="
+    DATA_CONT_DIR="${ROOT_DIR}/container-data"
+    
+    cd "${DATA_CONT_DIR}"
+    atym build
+    atym push ei-data
+
+    echo
+
+    CLASS_CONT_DIR="${ROOT_DIR}/container-classifier"
+    cd "${CLASS_CONT_DIR}"
+    atym build
+    atym push ei-classifier
+
+    echo
+    echo "=== ATYM build done ==="
+    echo
+}
+
 case "${MODE}" in
     clean)
         clean
@@ -77,6 +97,10 @@ case "${MODE}" in
         ;;
     wasm)
         build_wasm
+        ;;
+    atym)
+        build_wasm
+        build_atym
         ;;
     both)
         build_native

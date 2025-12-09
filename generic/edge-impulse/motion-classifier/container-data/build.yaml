@@ -1,0 +1,12 @@
+# Copyright (C) 2025 Atym Incorporated. All rights reserved.
+# Atym container image definition
+
+version: '1'
+
+name: ei-data
+binaries:
+  - path: ../build-wasm/edge-impulse-standalone-data.wasm
+
+config:
+  permissions:
+    - ocre_messaging

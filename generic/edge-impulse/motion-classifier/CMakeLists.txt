@@ -8,32 +8,45 @@ project(${APPNAME} C CXX)
 # Options
 # ------------------------------------------------------------
 
-# When ON, build a WASI/WASM binary. When OFF, build a native binary.
 option(BUILD_WASM "Build WASM/WASI binary (requires WASI SDK toolchain)" OFF)
-
-# Optional CMSIS-NN sources (same as your original file)
 option(USE_CMSIS_NN "Enable CMSIS-NN optimizations" OFF)
 
 # ------------------------------------------------------------
-# Common settings
+# Common settings / defines
 # ------------------------------------------------------------
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Common preprocessor definitions shared between native & WASM
+# Add the ocre-sdk as a subdirectory and build it
+set(OCRE_SDK_PATH "../../../ocre-sdk")
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${OCRE_SDK_PATH}/CMakeLists.txt")
+    message(FATAL_ERROR "ocre-sdk not found at ${OCRE_SDK_PATH}. Please ensure the ocre-sdk directory exists and contains CMakeLists.txt")
+endif()
+
+add_subdirectory(${OCRE_SDK_PATH} ocre-sdk-build)
+
 set(COMMON_DEFINES
-    EI_PORTING_POSIX=1              # Force POSIX port for WASI compatibility
-    USE_CMSIS_NN=OFF                # Default OFF since WASI does not support
+    EI_PORTING_POSIX=1
+    USE_CMSIS_NN=OFF
     EI_LOG_LEVEL=4
     TF_LITE_DISABLE_X86_NEON=1
     EIDSP_SIGNAL_C_FN_POINTER=1
     EI_C_LINKAGE=1
 )
 
-# Source lists (same structure as your original CMake)
-set(CSOURCES
+# Root include; adjust if you want more target-local includes instead
+include_directories(
+    ${CMAKE_SOURCE_DIR}
+    ocre_api
+)
+
+# ------------------------------------------------------------
+# Edge Impulse / TFLM sources (classifier only)
+# ------------------------------------------------------------
+
+set(EI_CSOURCES
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/tensorflow/lite/c/common.c
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/Source/BasicMathFunctions/*.c
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/Source/FastMathFunctions/*.c
@@ -43,7 +56,7 @@ set(CSOURCES
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/Source/TransformFunctions/*bit*.c
 )
 
-set(CXXSOURCES
+set(EI_CXXSOURCES
     ${CMAKE_SOURCE_DIR}/tflite-model/*.cpp
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/dsp/kissfft/*.cpp
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/dsp/dct/*.cpp
@@ -59,21 +72,19 @@ set(CXXSOURCES
     ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/tensorflow/lite/core/api/*.cc
 )
 
-set(APP_CSOURCES
-    ${CMAKE_SOURCE_DIR}/source/main.c
-)
-
 if(USE_CMSIS_NN)
     list(APPEND COMMON_DEFINES
         EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
         __ARM_FEATURE_DSP=1
         __GNUC_PYTHON__=1
     )
+
     include_directories(
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Include/
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/DSP/PrivateInclude/
     )
-    list(APPEND CSOURCES
+
+    list(APPEND EI_CSOURCES
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Source/ActivationFunctions/*.c
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Source/BasicMathFunctions/*.c
         ${CMAKE_SOURCE_DIR}/edge-impulse-sdk/CMSIS/NN/Source/ConcatenationFunctions/*.c
@@ -86,65 +97,110 @@ if(USE_CMSIS_NN)
     )
 endif()
 
-# Glob the sources
-file(GLOB CSOURCE_FILES ${CSOURCES})
-file(GLOB CXXSOURCE_FILES ${CXXSOURCES})
-file(GLOB APP_CSOURCE_FILES ${APP_CSOURCES})
+file(GLOB EI_CSOURCE_FILES  ${EI_CSOURCES})
+file(GLOB EI_CXXSOURCE_FILES ${EI_CXXSOURCES})
 
-set(ALL_SOURCES
-    ${CSOURCE_FILES}
-    ${CXXSOURCE_FILES}
-    ${APP_CSOURCE_FILES}
+# ------------------------------------------------------------
+# App sources
+# ------------------------------------------------------------
+
+# Classifier container main
+set(CLASSIFIER_APP_CSOURCES
+    ${CMAKE_SOURCE_DIR}/container-classifier/main.c
+)
+
+file(GLOB CLASSIFIER_APP_FILES ${CLASSIFIER_APP_CSOURCES})
+
+set(CLASSIFIER_SOURCES
+    ${EI_CSOURCE_FILES}
+    ${EI_CXXSOURCE_FILES}
+    ${CLASSIFIER_APP_FILES}
+)
+
+# Data container main + QCBOR only
+set(DATA_APP_CSOURCES
+    ${CMAKE_SOURCE_DIR}/container-data/main.c
+)
+file(GLOB DATA_APP_FILES ${DATA_APP_CSOURCES})
+
+file(GLOB QCBOR_SOURCES
+    ${CMAKE_SOURCE_DIR}/QCBOR/src/*.c
+)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/QCBOR/inc
+)
+
+set(DATA_SOURCES
+    ${DATA_APP_FILES}
+    ${QCBOR_SOURCES}
 )
 
 # ------------------------------------------------------------
-# WASM / Native targets
+# Targets
 # ------------------------------------------------------------
 
 if(BUILD_WASM)
+    set(CLASSIFIER_TARGET ${APPNAME}-classifier.wasm)
+    set(DATA_TARGET       ${APPNAME}-data.wasm)
 
-    add_executable(${APPNAME}.wasm ${ALL_SOURCES})
+    add_executable(${CLASSIFIER_TARGET} ${CLASSIFIER_SOURCES})
+    add_executable(${DATA_TARGET}       ${DATA_SOURCES})
 
-    target_compile_definitions(${APPNAME}.wasm PRIVATE ${COMMON_DEFINES})
+    # Common defines to both
+    target_compile_definitions(${CLASSIFIER_TARGET} PRIVATE ${COMMON_DEFINES})
+    target_compile_definitions(${DATA_TARGET}       PRIVATE ${COMMON_DEFINES})
 
-    target_compile_options(${APPNAME}.wasm PRIVATE
-        -Os
-        -DNDEBUG
-        -Wall
-        -fno-exceptions
-        -Wno-strict-aliasing
-        -Wno-unknown-attributes
-        -I${CMAKE_SOURCE_DIR}
+    # QCBOR float clean-up for data container
+    target_compile_definitions(${DATA_TARGET} PRIVATE
+        QCBOR_DISABLE_FLOAT_HW_USE
     )
 
-    # Linker options specific to WASI / WASM
-    target_link_options(${APPNAME}.wasm PRIVATE
-        -Wl,--strip-all
-        -Wl,--allow-undefined
-        -lm
-    )
+    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET})
+        target_compile_options(${tgt} PRIVATE
+            -Os
+            -DNDEBUG
+            -Wall
+            -fno-exceptions
+            -Wno-strict-aliasing
+            -Wno-unknown-attributes
+        )
 
-    target_link_libraries(${APPNAME}.wasm PRIVATE m)
+        target_link_options(${tgt} PRIVATE
+            -Wl,--strip-all
+            -Wl,--allow-undefined
+            -lm
+        )
+
+        target_link_libraries(${tgt} PRIVATE m ocre_api)
+    endforeach()
 
 else()
-    # Native build
-    add_executable(${APPNAME} ${ALL_SOURCES})
+    set(CLASSIFIER_TARGET ${APPNAME}-classifier)
+    set(DATA_TARGET       ${APPNAME}-data)
 
-    target_compile_definitions(${APPNAME} PRIVATE ${COMMON_DEFINES})
+    add_executable(${CLASSIFIER_TARGET} ${CLASSIFIER_SOURCES})
+    add_executable(${DATA_TARGET}       ${DATA_SOURCES})
 
-    target_compile_options(${APPNAME} PRIVATE
-        -Os
-        -DNDEBUG
-        -Wall
-        -Wno-strict-aliasing
-        -I${CMAKE_SOURCE_DIR}
+    target_compile_definitions(${CLASSIFIER_TARGET} PRIVATE ${COMMON_DEFINES})
+    target_compile_definitions(${DATA_TARGET}       PRIVATE ${COMMON_DEFINES})
+    target_compile_definitions(${DATA_TARGET} PRIVATE
+        QCBOR_DISABLE_FLOAT_HW_USE
     )
 
-    target_link_options(${APPNAME} PRIVATE
-        -Wl,--strip-all    
-        -lm
-    )
+    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET})
+        target_compile_options(${tgt} PRIVATE
+            -Os
+            -DNDEBUG
+            -Wall
+            -Wno-strict-aliasing
+        )
 
-    target_link_libraries(${APPNAME} PRIVATE m)
+        target_link_options(${tgt} PRIVATE
+            -Wl,--strip-all
+            -lm
+        )
+
+        target_link_libraries(${tgt} PRIVATE m ocre_api)
+    endforeach()
 
 endif()

@@ -3,7 +3,7 @@
 
 version: '1'
 
-name: ei-motion-model
+name: ei-classifier
 binaries:
   - path: build/edge-impulse-standalone.wasm
 
