@@ -136,6 +136,18 @@ set(DATA_SOURCES
     ${QCBOR_SOURCES}
 )
 
+# Data container main + QCBOR only
+set(DATA_TEST_APP_CSOURCES
+    ${CMAKE_SOURCE_DIR}/container-data/test.c
+    ${CMAKE_SOURCE_DIR}/container-data/ei_cbor_decoder.c
+)
+file(GLOB DATA_TEST_APP_FILES ${DATA_TEST_APP_CSOURCES})
+
+set(DATA_TEST_SOURCES
+    ${DATA_TEST_APP_FILES}
+    ${QCBOR_SOURCES}
+)
+
 # ------------------------------------------------------------
 # Targets
 # ------------------------------------------------------------
@@ -143,20 +155,27 @@ set(DATA_SOURCES
 if(BUILD_WASM)
     set(CLASSIFIER_TARGET ${APPNAME}-classifier.wasm)
     set(DATA_TARGET       ${APPNAME}-data.wasm)
+    set(DATA_TEST_TARGET  ${APPNAME}-data-test.wasm)
 
     add_executable(${CLASSIFIER_TARGET} ${CLASSIFIER_SOURCES})
     add_executable(${DATA_TARGET}       ${DATA_SOURCES})
+    add_executable(${DATA_TEST_TARGET}  ${DATA_TEST_SOURCES})
 
     # Common defines to both
     target_compile_definitions(${CLASSIFIER_TARGET} PRIVATE ${COMMON_DEFINES})
     target_compile_definitions(${DATA_TARGET}       PRIVATE ${COMMON_DEFINES})
+    target_compile_definitions(${DATA_TEST_TARGET}  PRIVATE ${COMMON_DEFINES})
 
     # QCBOR float clean-up for data container
     target_compile_definitions(${DATA_TARGET} PRIVATE
         QCBOR_DISABLE_FLOAT_HW_USE
     )
 
-    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET})
+    target_compile_definitions(${DATA_TEST_TARGET} PRIVATE
+        QCBOR_DISABLE_FLOAT_HW_USE
+    )
+
+    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET} ${DATA_TEST_TARGET})
         target_compile_options(${tgt} PRIVATE
             -Os
             -DNDEBUG

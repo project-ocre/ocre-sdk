@@ -7,13 +7,17 @@
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include <ocre_api.h>
 
+#ifndef LOG_PREFIX
+#define LOG_PREFIX "[CLS] "
+#endif
+
 // --------------------------------------------------------------------------
 // Bus configuration
 // --------------------------------------------------------------------------
-#define RAW_TOPIC        "ei/sample/raw"
-#define RAW_CONTENT_TYPE "application/ei-bus-f32"
-#define RESULT_TOPIC     "ei/result"
-#define RESULT_CONTENT_TYPE "text/plain"
+#define RAW_TOPIC             "ei/sample/raw"
+#define RAW_CONTENT_TYPE      "application/ei-bus-f32"
+#define RESULT_TOPIC          "ei/result"
+#define RESULT_CONTENT_TYPE   "text/plain"
 
 // --------------------------------------------------------------------------
 // Edge Impulse feature buffer & signal callback
@@ -44,23 +48,25 @@ static void publish_result(const ei_impulse_result_t *result);
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0); // disable stdout buffering for logs
 
-    printf("EI classifier subscriber starting up...\n");
+    printf(LOG_PREFIX "EI classifier subscriber starting up (closed-loop responder)...\n");
 
     int ret = ocre_register_message_callback(RAW_TOPIC, message_handler);
     if (ret != OCRE_SUCCESS) {
-        printf("Error: Failed to register message callback for %s (ret=%d)\n",
+        printf(LOG_PREFIX "Error: Failed to register message callback for %s (ret=%d)\n",
                RAW_TOPIC, ret);
     }
 
     ret = ocre_subscribe_message(RAW_TOPIC);
     if (ret != OCRE_SUCCESS) {
-        printf("Error: Failed to subscribe to topic %s (ret=%d)\n",
+        printf(LOG_PREFIX "Error: Failed to subscribe to topic %s (ret=%d)\n",
                RAW_TOPIC, ret);
         ocre_unregister_message_callback(RAW_TOPIC);
     }
 
-    printf("Listening for samples on topic '%s' (content_type=%s)\n",
+    printf(LOG_PREFIX "Listening for samples on topic '%s' (content_type=%s)\n",
            RAW_TOPIC, RAW_CONTENT_TYPE);
+    printf(LOG_PREFIX "Publishing results on topic '%s' (content_type=%s)\n",
+           RESULT_TOPIC, RESULT_CONTENT_TYPE);
 
     while (1) {
         ocre_process_events();
@@ -78,31 +84,31 @@ static void message_handler(const char *topic,
                             uint32_t payload_len)
 {
     if (!topic || !content_type || !payload) {
-        printf("Invalid message data received\n");
+        printf(LOG_PREFIX "Invalid message data received\n");
         return;
     }
 
-    printf("Received message: topic=%s, content_type=%s, len=%u\n",
+    printf(LOG_PREFIX "Received message: topic=%s, content_type=%s, len=%u\n",
            topic, content_type, payload_len);
 
     if (strcmp(topic, RAW_TOPIC) != 0) {
-        printf("Ignoring message on unexpected topic '%s'\n", topic);
+        printf(LOG_PREFIX "Ignoring message on unexpected topic '%s'\n", topic);
         return;
     }
 
     if (strcmp(content_type, RAW_CONTENT_TYPE) != 0) {
-        printf("Ignoring message with unexpected content_type '%s'\n",
+        printf(LOG_PREFIX "Ignoring message with unexpected content_type '%s'\n",
                content_type);
         return;
     }
 
     if (payload_len == 0) {
-        printf("Payload is empty\n");
+        printf(LOG_PREFIX "Payload is empty\n");
         return;
     }
 
     if (payload_len % sizeof(float) != 0) {
-        printf("Payload length (%u) is not a multiple of sizeof(float)=%zu\n",
+        printf(LOG_PREFIX "Payload length (%u) is not a multiple of sizeof(float)=%zu\n",
                payload_len, sizeof(float));
         return;
     }
@@ -124,7 +130,7 @@ static void message_handler(const char *topic,
 
     feature_ix = num_needed; // matches total_length of the signal
 
-    printf("Running classifier on %zu features (received %zu floats)\n",
+    printf(LOG_PREFIX "Running classifier on %zu features (received %zu floats)\n",
            num_needed, total_values);
 
     signal_t signal;
@@ -133,38 +139,38 @@ static void message_handler(const char *topic,
 
     ei_impulse_result_t result;
     EI_IMPULSE_ERROR res = run_classifier(&signal, &result, true);
-    printf("run_classifier returned: %d\n", res);
+    printf(LOG_PREFIX "run_classifier returned: %d\n", res);
 
     if (res != EI_IMPULSE_OK) {
-        printf("Classifier error: %d\n", res);
+        printf(LOG_PREFIX "Classifier error: %d\n", res);
         return;
     }
 
     // ----------------------------------------------------------------------
     // Print predictions (same format as original single-shot app)
     // ----------------------------------------------------------------------
-    printf("Begin output\n");
-    printf("[");
+    printf(LOG_PREFIX "Begin output\n");
+    printf(LOG_PREFIX "[");
 
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        printf("%.5f", result.classification[ix].value);
+        printf(LOG_PREFIX "%.5f", result.classification[ix].value);
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
-        printf(", ");
+        printf(LOG_PREFIX ", ");
 #else
         if (ix != EI_CLASSIFIER_LABEL_COUNT - 1) {
-            printf(", ");
+            printf(LOG_PREFIX ", ");
         }
 #endif
     }
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
-    printf("%.3f", result.anomaly);
+    printf(LOG_PREFIX "%.3f", result.anomaly);
 #endif
-    printf("]\n");
-    printf("End output\n");
+    printf(LOG_PREFIX "]\n");
+    printf(LOG_PREFIX "End output\n");
 
     // ----------------------------------------------------------------------
-    // Optional: publish a simple top-1 result
+    // Publish a simple top-1 result for closed-loop driver
     // ----------------------------------------------------------------------
     publish_result(&result);
 }
@@ -189,7 +195,7 @@ static void publish_result(const ei_impulse_result_t *result)
     }
 
     if (!top_label) {
-        printf("No labels found in result; not publishing\n");
+        printf(LOG_PREFIX "No labels found in result; not publishing\n");
         return;
     }
 
@@ -197,7 +203,7 @@ static void publish_result(const ei_impulse_result_t *result)
     int n = snprintf(payload, sizeof(payload),
                      "label=%s score=%.5f", top_label, top_score);
     if (n < 0 || n >= (int)sizeof(payload)) {
-        printf("Result message truncated; not publishing\n");
+        printf(LOG_PREFIX "Result message truncated; not publishing\n");
         return;
     }
 
@@ -206,8 +212,8 @@ static void publish_result(const ei_impulse_result_t *result)
                                    payload,
                                    (uint32_t)(n + 1)); // include NUL
     if (ret == OCRE_SUCCESS) {
-        printf("Published result: %s on topic %s\n", payload, RESULT_TOPIC);
+        printf(LOG_PREFIX "Published result: %s on topic %s\n", payload, RESULT_TOPIC);
     } else {
-        printf("Failed to publish result (ret=%d)\n", ret);
+        printf(LOG_PREFIX "Failed to publish result (ret=%d)\n", ret);
     }
 }

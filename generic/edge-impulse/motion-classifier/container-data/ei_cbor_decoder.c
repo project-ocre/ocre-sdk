@@ -5,6 +5,10 @@
 #include <string.h>
 #include <errno.h>
 
+#ifndef EI_CBOR_LOG_PREFIX
+#define EI_CBOR_LOG_PREFIX "[CBOR] "
+#endif
+
 /* Try to be tolerant of different QCBOR include layouts. */
 #if __has_include("qcbor/qcbor.h")
 #  include "qcbor/qcbor.h"
@@ -13,6 +17,9 @@
 #else
 #  error "QCBOR header not found. Adjust include path for qcbor.h."
 #endif
+
+/* Uncomment to enable extra debug logging for values[][] */
+#define EI_CBOR_DEBUG_VALUES 0
 
 /* Local helper: compare UsefulBufC to a C string literal */
 static bool ub_equals_cstr(UsefulBufC ub, const char *s)
@@ -72,10 +79,10 @@ static bool ei_cbor_find_values_dims(const uint8_t *buf, size_t len,
                     *out_axes = (size_t)item.val.uCount;
                 }
                 else if (*out_axes != (size_t)item.val.uCount) {
-                    fprintf(stderr,
-                            "CBOR values array has inconsistent axis counts "
-                            "(got %llu, expected %zu)\n",
-                            (unsigned long long)item.val.uCount, *out_axes);
+                    printf(EI_CBOR_LOG_PREFIX
+                           "CBOR values array has inconsistent axis counts "
+                           "(got %llu, expected %zu)\n",
+                           (unsigned long long)item.val.uCount, *out_axes);
                     return false;
                 }
             }
@@ -85,13 +92,160 @@ static bool ei_cbor_find_values_dims(const uint8_t *buf, size_t len,
     /* Check for decode error (other than 'no more items') */
     QCBORError finish_err = QCBORDecode_Finish(&dc);
     if (finish_err != QCBOR_SUCCESS) {
-        fprintf(stderr, "QCBOR dimension pass failed: %d\n", (int)finish_err);
+        printf(EI_CBOR_LOG_PREFIX "QCBOR dimension pass failed: %d\n",
+               (int)finish_err);
         return false;
     }
 
     if (*out_frames == 0 || *out_axes == 0) {
-        fprintf(stderr, "Failed to find payload.values array in CBOR\n");
+        printf(EI_CBOR_LOG_PREFIX "Failed to find payload.values array in CBOR\n");
         return false;
+    }
+
+    return true;
+}
+
+/* Second pass just for values[][]: fills an existing values buffer.
+ * This uses the same "find payload.values" logic as ei_cbor_find_values_dims,
+ * but decodes each numeric element into the flat [frame * axes + axis] array.
+ */
+static bool ei_cbor_decode_values_only(const uint8_t *buf, size_t len,
+                                       float *values,
+                                       size_t frames, size_t axes)
+{
+    if (!buf || !values || frames == 0 || axes == 0) {
+        return false;
+    }
+
+    QCBORDecodeContext dc;
+    QCBORItem          item;
+    QCBORError         err;
+
+    UsefulBufC ub = (UsefulBufC){ .ptr = buf, .len = len };
+    QCBORDecode_Init(&dc, ub, QCBOR_DECODE_MODE_NORMAL);
+
+    bool    in_values          = false;
+    uint8_t values_array_level = 0;
+    uint8_t frame_array_level  = 0;
+
+    size_t frame_index = 0;
+    size_t axis_index  = 0;
+    size_t decoded     = 0;
+
+    while ((err = QCBORDecode_GetNext(&dc, &item)) == QCBOR_SUCCESS) {
+
+        if (!in_values) {
+            /* Look for label "values" that is an array, same as
+             * ei_cbor_find_values_dims().
+             */
+            if (item.uLabelType == QCBOR_TYPE_TEXT_STRING &&
+                item.uDataType == QCBOR_TYPE_ARRAY &&
+                ub_equals_cstr(item.label.string, "values"))
+            {
+                in_values          = true;
+                values_array_level = item.uNestingLevel;
+                frame_array_level  = item.uNextNestLevel;
+                frame_index        = 0;
+                axis_index         = 0;
+                continue;
+            }
+        }
+        else {
+            /* We are inside values[][]; exit when nesting drops back. */
+            if (item.uNestingLevel <= values_array_level) {
+                break; /* Done scanning values array */
+            }
+
+            /* Each frame is itself an array at frame_array_level. */
+            if (item.uNestingLevel == frame_array_level &&
+                item.uDataType == QCBOR_TYPE_ARRAY)
+            {
+                /* Start of a new frame */
+                axis_index = 0;
+
+                /* Optionally sanity-check number of axes */
+                if (item.val.uCount != (uint64_t)axes) {
+                    printf(EI_CBOR_LOG_PREFIX
+                           "Warning: frame has %u axes, expected %zu\n",
+                           (unsigned)item.val.uCount, axes);
+                }
+
+                if (frame_index >= frames) {
+                    printf(EI_CBOR_LOG_PREFIX
+                           "Warning: extra frame %zu (max %zu)\n",
+                           frame_index, frames);
+                }
+
+                frame_index++;
+                continue;
+            }
+
+            /* Numeric scalars inside each frame array live one level deeper. */
+            if (item.uNestingLevel == (uint8_t)(frame_array_level + 1)) {
+
+                double v = 0.0;
+                bool   is_number = false;
+
+                switch (item.uDataType) {
+                    case QCBOR_TYPE_DOUBLE:
+                        v = item.val.dfnum;
+                        is_number = true;
+                        break;
+                    case QCBOR_TYPE_INT64:
+                        v = (double)item.val.int64;
+                        is_number = true;
+                        break;
+                    case QCBOR_TYPE_UINT64:
+                        v = (double)item.val.uint64;
+                        is_number = true;
+                        break;
+                    default:
+                        /* Other types (e.g. bool, text) are ignored */
+                        break;
+                }
+
+                if (is_number) {
+                    /* Note: frame_index was pre-incremented on seeing the
+                     * frame array above, so we store into frame_index-1.
+                     */
+                    size_t f = (frame_index == 0) ? 0 : (frame_index - 1);
+                    size_t a = axis_index;
+
+                    if (f < frames && a < axes) {
+                        size_t idx = f * axes + a;
+                        values[idx] = (float)v;
+                    }
+
+                    decoded++;
+
+                    axis_index++;
+                    if (axis_index >= axes) {
+                        axis_index = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    QCBORError finish_err = QCBORDecode_Finish(&dc);
+    if (finish_err != QCBOR_SUCCESS) {
+        printf(EI_CBOR_LOG_PREFIX "QCBOR values-only decode failed: %d\n",
+               (int)finish_err);
+        return false;
+    }
+
+    if (decoded == 0) {
+        printf(EI_CBOR_LOG_PREFIX
+               "No numeric entries decoded from payload.values\n");
+        return false;
+    }
+
+    size_t expected = frames * axes;
+    if (decoded != expected) {
+        printf(EI_CBOR_LOG_PREFIX
+               "Warning: decoded %zu values, expected %zu (%zu frames * %zu axes)\n",
+               decoded, expected, frames, axes);
+        /* Not fatal – we still return true, but some values may remain zero. */
     }
 
     return true;
@@ -116,8 +270,8 @@ static bool ei_cbor_decode_full(const uint8_t *buf, size_t len,
 
     out->values = (float *)calloc(out->n_values, sizeof(float));
     if (!out->values) {
-        fprintf(stderr, "Failed to allocate values array (%zu floats)\n",
-                out->n_values);
+        printf(EI_CBOR_LOG_PREFIX "Failed to allocate values array (%zu floats)\n",
+               out->n_values);
         return false;
     }
 
@@ -252,7 +406,8 @@ static bool ei_cbor_decode_full(const uint8_t *buf, size_t len,
         }
 
         /* -------------------- values decoding -------------------- */
-        if (in_values) {
+        if (in_values)
+        {
             if (item.uNestingLevel <= values_array_level) {
                 /* Left values[][] */
                 in_values          = false;
@@ -264,29 +419,89 @@ static bool ei_cbor_decode_full(const uint8_t *buf, size_t len,
             {
                 /* Start of a new frame; reset axis index */
                 axis_index = 0;
-                /* QCBOR stores array length in item.val.uCount; we already
-                 * validated this is consistent in the dimension pass. */
+#if defined(EI_CBOR_DEBUG_VALUES)
+                printf(EI_CBOR_LOG_PREFIX
+                       "values: new frame %zu (array, uCount=%u, uNestingLevel=%u)\n",
+                       frame_index, (unsigned)item.val.uCount,
+                       (unsigned)item.uNestingLevel);
+#endif
             }
-            else if (item.uNestingLevel == (uint8_t)(frame_array_level + 1) &&
-                     item.uDataType == QCBOR_TYPE_DOUBLE)
+            else if (item.uNestingLevel >= (uint8_t)(frame_array_level + 1) &&
+                     item.uNestingLevel <= (uint8_t)(frame_array_level + 2))
             {
-                if (frame_index < frames && axis_index < axes) {
-                    size_t idx = frame_index * axes + axis_index;
-                    out->values[idx] = (float)item.val.dfnum;
-                }
-                axis_index++;
+                /* We expect numeric scalars one level deeper than frame arrays.
+                 * But we log everything here to see what QCBOR is giving us. */
 
-                if (axis_index >= axes) {
-                    axis_index = 0;
-                    frame_index++;
+#if defined(EI_CBOR_DEBUG_VALUES)
+                printf(EI_CBOR_LOG_PREFIX
+                       "values: item at nest=%u, type=%u\n",
+                       (unsigned)item.uNestingLevel,
+                       (unsigned)item.uDataType);
+#endif
+
+                /* Treat any basic numeric type as a sample value */
+                double v;
+                bool   is_number = false;
+
+                switch (item.uDataType) {
+                    case QCBOR_TYPE_DOUBLE:
+                        v = item.val.dfnum;
+                        is_number = true;
+                        break;
+#ifdef QCBOR_TYPE_FLOAT
+                    case QCBOR_TYPE_FLOAT:
+                        v = (double)item.val.fnum;
+                        is_number = true;
+                        break;
+#endif
+                    case QCBOR_TYPE_UINT64:
+                        v = (double)item.val.uint64;
+                        is_number = true;
+                        break;
+                    case QCBOR_TYPE_INT64:
+                        v = (double)item.val.int64;
+                        is_number = true;
+                        break;
+                    default:
+                        /* Not a numeric type we know how to handle yet */
+                        is_number = false;
+                        break;
+                }
+
+                if (is_number) {
+                    if (frame_index < frames && axis_index < axes) {
+                        size_t idx = frame_index * axes + axis_index;
+                        out->values[idx] = (float)v;
+
+#if defined(EI_CBOR_DEBUG_VALUES)
+                        if (frame_index < 3 && axis_index < 3) {
+                            printf(EI_CBOR_LOG_PREFIX
+                                   "values: set[%zu,%zu] = %f\n",
+                                   frame_index, axis_index, (float)v);
+                        }
+#endif
+                    }
+
+                    axis_index++;
+                    if (axis_index >= axes) {
+                        axis_index = 0;
+                        frame_index++;
+                    }
                 }
             }
         }
+        // else {
+        //     printf(EI_CBOR_LOG_PREFIX
+        //            "Unexpected item outside values[] at nest=%u, type=%u\n",
+        //            (unsigned)item.uNestingLevel,
+        //            (unsigned)item.uDataType);
+        // }
     }
 
     QCBORError finish_err = QCBORDecode_Finish(&dc);
     if (finish_err != QCBOR_SUCCESS) {
-        fprintf(stderr, "QCBOR full decode failed: %d\n", (int)finish_err);
+        printf(EI_CBOR_LOG_PREFIX "QCBOR full decode failed: %d\n",
+               (int)finish_err);
         return false;
     }
 
@@ -304,11 +519,26 @@ bool ei_cbor_decode_buffer(const uint8_t *buf, size_t len,
     size_t frames = 0;
     size_t axes   = 0;
 
+    /* First pass: discover dimensions. */
     if (!ei_cbor_find_values_dims(buf, len, &frames, &axes)) {
         return false;
     }
 
-    return ei_cbor_decode_full(buf, len, out, frames, axes);
+    /* Second pass: decode metadata + allocate values[].
+     * (This already sets out->n_frames, out->n_axes, and calloc's values[].)
+     */
+    if (!ei_cbor_decode_full(buf, len, out, frames, axes)) {
+        return false;
+    }
+
+    /* Third pass: robustly fill values[][] into out->values. We overwrite
+     * whatever ei_cbor_decode_full() put there (currently all zeros).
+     */
+    if (!ei_cbor_decode_values_only(buf, len, out->values, frames, axes)) {
+        return false;
+    }
+
+    return true;
 }
 
 /* Public API: decode from file on disk */
@@ -320,31 +550,33 @@ bool ei_cbor_decode_file(const char *path, ei_cbor_sample_t *out)
 
     FILE *f = fopen(path, "rb");
     if (!f) {
-        fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
+        printf(EI_CBOR_LOG_PREFIX "Failed to open %s: %s\n",
+               path, strerror(errno));
         return false;
     }
 
     if (fseek(f, 0, SEEK_END) != 0) {
-        fprintf(stderr, "Failed to seek %s\n", path);
+        printf(EI_CBOR_LOG_PREFIX "Failed to seek %s\n", path);
         fclose(f);
         return false;
     }
 
     long fsize = ftell(f);
     if (fsize < 0) {
-        fprintf(stderr, "ftell failed for %s\n", path);
+        printf(EI_CBOR_LOG_PREFIX "ftell failed for %s\n", path);
         fclose(f);
         return false;
     }
     if (fseek(f, 0, SEEK_SET) != 0) {
-        fprintf(stderr, "Failed to rewind %s\n", path);
+        printf(EI_CBOR_LOG_PREFIX "Failed to rewind %s\n", path);
         fclose(f);
         return false;
     }
 
     uint8_t *buf = (uint8_t *)malloc((size_t)fsize);
     if (!buf) {
-        fprintf(stderr, "Failed to allocate %ld bytes for %s\n", fsize, path);
+        printf(EI_CBOR_LOG_PREFIX "Failed to allocate %ld bytes for %s\n",
+               fsize, path);
         fclose(f);
         return false;
     }
@@ -353,7 +585,7 @@ bool ei_cbor_decode_file(const char *path, ei_cbor_sample_t *out)
     fclose(f);
 
     if (nread != (size_t)fsize) {
-        fprintf(stderr, "Short read from %s\n", path);
+        printf(EI_CBOR_LOG_PREFIX "Short read from %s\n", path);
         free(buf);
         return false;
     }
