@@ -13,6 +13,8 @@ All examples are designed to be built using [wasi-sdk](https://github.com/WebAss
   ├── board_specific            # Hardware-targeted examples 
   │   ├── arduino_portenta_h7 
   │   └── b_u585i_iot02a
+  ├── testing                   # Testing and potentially faulty images.
+  │   └── return0, return1, pthread, etc. 
   ├── wasm-micro-runtime        # External module
 ```
 
