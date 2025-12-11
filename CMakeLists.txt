@@ -1,12 +1,14 @@
 cmake_minimum_required (VERSION 3.20.0)
 
 # Set the WASI SDK toolchain file
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk.cmake)
+set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-pthread.cmake)
+
+set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
 project(OcreSdkSamples)
 
 # Set the linker flags
-set(CMAKE_EXE_LINKER_FLAGS "-Wl,--strip-all -Wl,--allow-undefined")
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,--strip-all -Wl,--allow-undefined -Wl,--max-memory=1048576")
 
 # Set compilation flags
 add_compile_options(
@@ -90,3 +92,4 @@ target_link_libraries("webserver-complex.wasm" socket_wasi_ext ocre_api)
 add_executable("return0.wasm" testing/return0.c)
 add_executable("return1.wasm" testing/return1.c)
 add_executable("sleep_5_return_0.wasm" testing/sleep_5_return_0.c)
+add_executable("pthread.wasm" testing/pthread.c)
