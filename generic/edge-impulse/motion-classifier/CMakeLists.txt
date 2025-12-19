@@ -149,6 +149,51 @@ set(DATA_TEST_SOURCES
 )
 
 # ------------------------------------------------------------
+# Asset embedder container (CBOR files -> headers -> extractor)
+# ------------------------------------------------------------
+
+set(EMBED_CBOR_DIR "${CMAKE_SOURCE_DIR}/data/testing"
+    CACHE PATH "Directory containing CBOR files to embed (only *.cbor* files are embedded)")
+
+set(ASSET_OUTPUT_ROOT_DEFAULT "/testing"
+    CACHE STRING "Default extraction root inside the runtime filesystem")
+
+set(ASSETS_APP_CSOURCES
+    ${CMAKE_SOURCE_DIR}/container-assets/main.c
+)
+set(ASSETS_APP_FILES ${ASSETS_APP_CSOURCES})
+
+# Inputs (so changes trigger regeneration)
+file(GLOB EMBED_CBOR_INPUTS "${EMBED_CBOR_DIR}/*.cbor*")
+if(NOT EMBED_CBOR_INPUTS)
+    message(FATAL_ERROR "No *.cbor* files found in EMBED_CBOR_DIR='${EMBED_CBOR_DIR}'")
+endif()
+
+list(GET EMBED_CBOR_INPUTS 0 first_abs)
+message(STATUS "First embedded CBOR: ${first_abs}")
+
+# Output dir for generated headers
+set(EMBED_GEN_DIR "${CMAKE_BINARY_DIR}/embedded")
+file(MAKE_DIRECTORY "${EMBED_GEN_DIR}")
+
+# One output “stamp” file for the generator step
+set(EMBED_STAMP "${EMBED_GEN_DIR}/embedded_assets.stamp")
+
+add_custom_command(
+    OUTPUT "${EMBED_STAMP}"
+    COMMAND python3
+        "${CMAKE_SOURCE_DIR}/container-assets/gen_embedded_assets.py"
+        --in-dir "${EMBED_CBOR_DIR}"
+        --out-dir "${EMBED_GEN_DIR}"
+        --pattern "*.cbor*"
+    COMMAND ${CMAKE_COMMAND} -E touch "${EMBED_STAMP}"
+    DEPENDS ${EMBED_CBOR_INPUTS} "${CMAKE_SOURCE_DIR}/container-assets/gen_embedded_assets.py"
+    VERBATIM
+)
+
+add_custom_target(assets_embed_headers DEPENDS "${EMBED_STAMP}")
+
+# ------------------------------------------------------------
 # Targets
 # ------------------------------------------------------------
 
@@ -156,15 +201,22 @@ if(BUILD_WASM)
     set(CLASSIFIER_TARGET ${APPNAME}-classifier.wasm)
     set(DATA_TARGET       ${APPNAME}-data.wasm)
     set(DATA_TEST_TARGET  ${APPNAME}-data-test.wasm)
+    set(ASSETS_TARGET     ${APPNAME}-assets.wasm)
 
     add_executable(${CLASSIFIER_TARGET} ${CLASSIFIER_SOURCES})
     add_executable(${DATA_TARGET}       ${DATA_SOURCES})
     add_executable(${DATA_TEST_TARGET}  ${DATA_TEST_SOURCES})
+    add_executable(${ASSETS_TARGET} ${ASSETS_APP_FILES})
+    add_dependencies(${ASSETS_TARGET} assets_embed_headers)
 
     # Common defines to both
     target_compile_definitions(${CLASSIFIER_TARGET} PRIVATE ${COMMON_DEFINES})
     target_compile_definitions(${DATA_TARGET}       PRIVATE ${COMMON_DEFINES})
     target_compile_definitions(${DATA_TEST_TARGET}  PRIVATE ${COMMON_DEFINES})
+    target_compile_definitions(${ASSETS_TARGET} PRIVATE
+        ${COMMON_DEFINES}
+        ASSET_OUTPUT_ROOT_DEFAULT="${ASSET_OUTPUT_ROOT_DEFAULT}"
+    )
 
     # QCBOR float clean-up for data container
     target_compile_definitions(${DATA_TARGET} PRIVATE
@@ -175,7 +227,11 @@ if(BUILD_WASM)
         QCBOR_DISABLE_FLOAT_HW_USE
     )
 
-    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET} ${DATA_TEST_TARGET})
+    target_include_directories(${ASSETS_TARGET} PRIVATE
+        ${EMBED_GEN_DIR}
+    )
+
+    foreach(tgt ${CLASSIFIER_TARGET} ${DATA_TARGET} ${DATA_TEST_TARGET} ${ASSETS_TARGET})
         target_compile_options(${tgt} PRIVATE
             -Os
             -DNDEBUG

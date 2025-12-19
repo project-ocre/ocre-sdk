@@ -1,0 +1,12 @@
+# Copyright (C) 2025 Atym Incorporated. All rights reserved.
+# Atym container image definition
+
+version: '1'
+
+name: ei-assets
+binaries:
+  - path: ../build-wasm/edge-impulse-standalone-assets.wasm
+
+config:
+  permissions:
+    - ocre_filesystem
