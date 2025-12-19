@@ -153,20 +153,20 @@ static void message_handler(const char *topic,
     printf(LOG_PREFIX "[");
 
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        printf(LOG_PREFIX "%.5f", result.classification[ix].value);
+        printf("%.5f", result.classification[ix].value);
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
-        printf(LOG_PREFIX ", ");
+        printf(", ");
 #else
         if (ix != EI_CLASSIFIER_LABEL_COUNT - 1) {
-            printf(LOG_PREFIX ", ");
+            printf(", ");
         }
 #endif
     }
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
-    printf(LOG_PREFIX "%.3f", result.anomaly);
+    printf("%.3f", result.anomaly);
 #endif
-    printf(LOG_PREFIX "]\n");
+    printf("]\n");
     printf(LOG_PREFIX "End output\n");
 
     // ----------------------------------------------------------------------
