@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #ifndef EI_CBOR_LOG_PREFIX
 #define EI_CBOR_LOG_PREFIX "[CBOR] "
@@ -548,28 +549,28 @@ bool ei_cbor_decode_file(const char *path, ei_cbor_sample_t *out)
         return false;
     }
 
+    // ftell() is currently not supported on Zephyr - use stat instead.
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        printf(EI_CBOR_LOG_PREFIX "stat failed for %s: %s\n", path, strerror(errno));
+        return false;
+    }
+
+    if (!S_ISREG(st.st_mode)) {
+        printf(EI_CBOR_LOG_PREFIX "%s is not a regular file\n", path);
+        return false;
+    }
+
+    long fsize = (long)st.st_size;
+    if (fsize <= 0) {
+        printf(EI_CBOR_LOG_PREFIX "%s has zero length\n", path);
+        return false;
+    }
+
     FILE *f = fopen(path, "rb");
     if (!f) {
         printf(EI_CBOR_LOG_PREFIX "Failed to open %s: %s\n",
                path, strerror(errno));
-        return false;
-    }
-
-    if (fseek(f, 0, SEEK_END) != 0) {
-        printf(EI_CBOR_LOG_PREFIX "Failed to seek %s\n", path);
-        fclose(f);
-        return false;
-    }
-
-    long fsize = ftell(f);
-    if (fsize < 0) {
-        printf(EI_CBOR_LOG_PREFIX "ftell failed for %s\n", path);
-        fclose(f);
-        return false;
-    }
-    if (fseek(f, 0, SEEK_SET) != 0) {
-        printf(EI_CBOR_LOG_PREFIX "Failed to rewind %s\n", path);
-        fclose(f);
         return false;
     }
 
@@ -581,7 +582,12 @@ bool ei_cbor_decode_file(const char *path, ei_cbor_sample_t *out)
         return false;
     }
 
-    size_t nread = fread(buf, 1, (size_t)fsize, f);
+    size_t nread = 0;
+    while (nread < (size_t)fsize) {
+        size_t r = fread(buf + nread, 1, (size_t)fsize - nread, f);
+        if (r == 0) break;
+        nread += r;
+    }
     fclose(f);
 
     if (nread != (size_t)fsize) {
