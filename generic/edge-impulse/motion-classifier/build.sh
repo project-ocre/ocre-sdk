@@ -81,7 +81,7 @@ build_atym() {
     CLASS_CONT_DIR="${ROOT_DIR}/container-classifier"
     cd "${CLASS_CONT_DIR}"
     atym build
-    atym push ei-classifier
+    atym push ei-classifier -a aot.yaml
 
     echo
     echo "=== ATYM build done ==="
