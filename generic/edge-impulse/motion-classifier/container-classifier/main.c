@@ -88,8 +88,8 @@ static void message_handler(const char *topic,
         return;
     }
 
-    printf(LOG_PREFIX "Received message: topic=%s, content_type=%s, len=%u\n",
-           topic, content_type, payload_len);
+    // printf(LOG_PREFIX "Received message: topic=%s, content_type=%s, len=%u\n",
+        //    topic, content_type, payload_len);
 
     if (strcmp(topic, RAW_TOPIC) != 0) {
         printf(LOG_PREFIX "Ignoring message on unexpected topic '%s'\n", topic);
@@ -130,16 +130,16 @@ static void message_handler(const char *topic,
 
     feature_ix = num_needed; // matches total_length of the signal
 
-    printf(LOG_PREFIX "Running classifier on %zu features (received %zu floats)\n",
-           num_needed, total_values);
+    // printf(LOG_PREFIX "Running classifier on %zu features (received %zu floats)\n",
+        //    num_needed, total_values);
 
     signal_t signal;
     signal.total_length = feature_ix;
     signal.get_data     = &get_feature_data;
 
     ei_impulse_result_t result;
-    EI_IMPULSE_ERROR res = run_classifier(&signal, &result, true);
-    printf(LOG_PREFIX "run_classifier returned: %d\n", res);
+    EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false);
+    // printf(LOG_PREFIX "run_classifier returned: %d\n", res);
 
     if (res != EI_IMPULSE_OK) {
         printf(LOG_PREFIX "Classifier error: %d\n", res);
@@ -149,7 +149,7 @@ static void message_handler(const char *topic,
     // ----------------------------------------------------------------------
     // Print predictions (same format as original single-shot app)
     // ----------------------------------------------------------------------
-    printf(LOG_PREFIX "Begin output\n");
+    // printf(LOG_PREFIX "Begin output\n");
     printf(LOG_PREFIX "[");
 
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
@@ -167,7 +167,7 @@ static void message_handler(const char *topic,
     printf("%.3f", result.anomaly);
 #endif
     printf("]\n");
-    printf(LOG_PREFIX "End output\n");
+    // printf(LOG_PREFIX "End output\n");
 
     // ----------------------------------------------------------------------
     // Publish a simple top-1 result for closed-loop driver
