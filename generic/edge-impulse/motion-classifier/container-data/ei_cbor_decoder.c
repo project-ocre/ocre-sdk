@@ -11,13 +11,13 @@
 #endif
 
 /* Try to be tolerant of different QCBOR include layouts. */
-#if __has_include("qcbor/qcbor.h")
+// #if __has_include("qcbor/qcbor.h")
 #  include "qcbor/qcbor.h"
-#elif __has_include("qcbor.h")
-#  include "qcbor.h"
-#else
-#  error "QCBOR header not found. Adjust include path for qcbor.h."
-#endif
+// #elif __has_include("qcbor.h")
+// #  include "qcbor.h"
+// #else
+// #  error "QCBOR header not found. Adjust include path for qcbor.h."
+// #endif
 
 /* Uncomment to enable extra debug logging for values[][] */
 #define EI_CBOR_DEBUG_VALUES 0
