@@ -3,9 +3,9 @@
 // CBOR sample publisher for Edge Impulse motion classifier.
 //
 // Closed-loop version:
-//  - Scans a directory for *.cbor* files (ingestion-format CBOR).
-//  - For each file, decodes the CBOR using a reusable QCBOR-based decoder
-//    (see ei_cbor_decoder.c / ei_cbor_decoder.h) into a structured sample.
+//  - Scans a directory for Edge Impulse *.cbor* files
+//  - For each file, decodes the CBOR (see ei_cbor_decoder.c / ei_cbor_decoder.h)
+//    into a structured sample.
 //  - Takes the payload.values array (float samples) and slices each long
 //    sample into classifier-sized windows using either random or deterministic
 //    (evenly spaced) start positions.
@@ -177,7 +177,7 @@ static void result_message_handler(const char *topic,
 }
 
 // -----------------------------------------------------------------------------
-// OCRE bus publishing helpers
+// OCRE messaging bus publishing helpers
 // -----------------------------------------------------------------------------
 
 static void publish_window(const char *sample_name,
@@ -185,25 +185,26 @@ static void publish_window(const char *sample_name,
                            const float *window_data,
                            size_t window_len)
 {
-    // Log for debug / traceability
-    printf(LOG_PREFIX "Publishing sample '%s' window %u (len=%u floats) to %s\n",
-           sample_name,
-           (unsigned)window_index,
-           (unsigned)window_len,
-           EI_BUS_TOPIC);
+    // Debug logging
+    // printf(LOG_PREFIX "Publishing sample '%s' window %u (len=%u floats) to %s\n",
+    //        sample_name,
+    //        (unsigned)window_index,
+    //        (unsigned)window_len,
+    //        EI_BUS_TOPIC);
 
     // Print sample name prior to publishing (per earlier requirement)
-    printf(LOG_PREFIX "Sample: %s (window %u)\n",
-           sample_name, (unsigned)window_index);
+    printf(LOG_PREFIX "Publish window %u of sample \"%s\"\n",
+           (unsigned)window_index, sample_name);
 
-    printf(LOG_PREFIX "Data: [");
-    for (int i = 0; i < (int)window_len; i++) {
-        printf("%.5f", window_data[i]);
-        if (i != (int)(window_len - 1)) {
-            printf(", ");
-        }
-    }
-    printf("]\n");
+    // Debug logging
+    // printf(LOG_PREFIX "Data: [");
+    // for (int i = 0; i < (int)window_len; i++) {
+    //     printf("%.5f", window_data[i]);
+    //     if (i != (int)(window_len - 1)) {
+    //         printf(", ");
+    //     }
+    // }
+    // printf("]\n");
 
     uint32_t payload_bytes = (uint32_t)(window_len * sizeof(float));
 
@@ -312,14 +313,15 @@ static void publish_windows_for_sample(const char *sample_name,
     const size_t chunks_to_emit    =
         (CHUNKS_PER_SAMPLE < available_windows) ? CHUNKS_PER_SAMPLE : available_windows;
 
-    printf(LOG_PREFIX
-           "Sample %s: %u frames, window_frames=%u -> %u possible windows, emitting %u\n",
-           sample_name,
-           (unsigned)n_frames,
-           (unsigned)window_frames,
-           (unsigned)available_windows,
-           (unsigned)chunks_to_emit);
-    printf(LOG_PREFIX "  expected label: '%s'\n", expected_label);
+    // Debug logging
+    // printf(LOG_PREFIX
+    //        "Sample %s: %u frames, window_frames=%u -> %u possible windows, emitting %u\n",
+    //        sample_name,
+    //        (unsigned)n_frames,
+    //        (unsigned)window_frames,
+    //        (unsigned)available_windows,
+    //        (unsigned)chunks_to_emit);
+    // printf(LOG_PREFIX "  expected label: '%s'\n", expected_label);
 
     if (chunks_to_emit == 0) {
         return;
@@ -399,8 +401,9 @@ static void publish_windows_for_sample(const char *sample_name,
             continue;
         }
 
-        printf(LOG_PREFIX "  Window %u: start_frame=%u\n",
-               (unsigned)w, (unsigned)start_frame);
+        // Debug logging
+        // printf(LOG_PREFIX "  Window %u: start_frame=%u\n",
+        //        (unsigned)w, (unsigned)start_frame);
 
         // Copy one full window: window_frames * n_axes floats.
         memcpy(window_buf,
@@ -555,27 +558,27 @@ static void process_file(const char *path)
         return;
     }
 
-    // Optional: log some metadata for debugging / reuse
-    if (sample.device_type[0] != '\0') {
-        printf(LOG_PREFIX "  device_type : %s\n", sample.device_type);
-    }
-    if (sample.device_name[0] != '\0') {
-        printf(LOG_PREFIX "  device_name : %s\n", sample.device_name);
-    }
-    if (sample.has_interval_ms) {
-        printf(LOG_PREFIX "  interval_ms : %.3f\n", sample.interval_ms);
-    }
-    if (sample.n_sensors > 0) {
-        printf(LOG_PREFIX "  sensors (%u):\n", sample.n_sensors);
-        for (uint32_t i = 0; i < sample.n_sensors; i++) {
-            printf(LOG_PREFIX "    [%u] %s (%s)\n",
-                   i,
-                   sample.sensors[i].name,
-                   sample.sensors[i].units);
-        }
-    }
-    printf(LOG_PREFIX "  frames: %zu, axes: %zu, total_floats: %zu\n",
-           sample.n_frames, sample.n_axes, sample.n_values);
+    // Debug logging
+    // if (sample.device_type[0] != '\0') {
+    //     printf(LOG_PREFIX "  device_type : %s\n", sample.device_type);
+    // }
+    // if (sample.device_name[0] != '\0') {
+    //     printf(LOG_PREFIX "  device_name : %s\n", sample.device_name);
+    // }
+    // if (sample.has_interval_ms) {
+    //     printf(LOG_PREFIX "  interval_ms : %.3f\n", sample.interval_ms);
+    // }
+    // if (sample.n_sensors > 0) {
+    //     printf(LOG_PREFIX "  sensors (%u):\n", sample.n_sensors);
+    //     for (uint32_t i = 0; i < sample.n_sensors; i++) {
+    //         printf(LOG_PREFIX "    [%u] %s (%s)\n",
+    //                i,
+    //                sample.sensors[i].name,
+    //                sample.sensors[i].units);
+    //     }
+    // }
+    // printf(LOG_PREFIX "  frames: %zu, axes: %zu, total_floats: %zu\n",
+    //        sample.n_frames, sample.n_axes, sample.n_values);
 
     if (sample.n_axes != N_AXES) {
         printf(LOG_PREFIX
@@ -610,7 +613,7 @@ int main(int argc, char **argv)
 
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    printf(LOG_PREFIX "Data publisher starting up (closed-loop mode)...\n");
+    printf(LOG_PREFIX "Data publisher start\n");
     printf(LOG_PREFIX "Using sample directory: %s\n", sample_dir);
 
     // Register and subscribe for classifier results
@@ -643,12 +646,12 @@ int main(int argc, char **argv)
     }
     free(files);
 
-    printf(LOG_PREFIX "Closed-loop testing complete.\n");
-    printf(LOG_PREFIX "Total windows:   %zu\n", g_total_windows);
-    printf(LOG_PREFIX "Correct windows: %zu\n", g_correct_windows);
+    printf(LOG_PREFIX "Test results:\n");
+    printf(LOG_PREFIX "  Total windows:   %zu\n", g_total_windows);
+    printf(LOG_PREFIX "  Correct windows: %zu\n", g_correct_windows);
     if (g_total_windows > 0) {
         float acc = (float)g_correct_windows * 100.0f / (float)g_total_windows;
-        printf(LOG_PREFIX "Window accuracy: %.2f %%\n", acc);
+        printf(LOG_PREFIX "  Window accuracy: %.2f %%\n", acc);
     }
 
     return 0;
