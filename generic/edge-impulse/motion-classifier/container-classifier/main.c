@@ -1,3 +1,15 @@
+/*
+ * Edge Impulse Motion Classifier Container
+ *
+ * This module implements a closed-loop inference responder that:
+ *  1. Listens for raw sensor samples on the OCRE messaging bus
+ *  2. Runs the Edge Impulse classifier on each sample
+ *  3. Publishes top-1 classification results back to the bus
+ *
+ * The classifier operates on pre-processed float feature vectors and outputs
+ * both detailed classification scores and top-1 predictions for validation.
+ */
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -11,30 +23,53 @@
 #define LOG_PREFIX "[CLS] "
 #endif
 
-// --------------------------------------------------------------------------
-// Bus configuration
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Bus Configuration
+ * ============================================================================ */
+
+/** Topic for receiving raw float samples from the data publisher. */
 #define RAW_TOPIC             "ei/sample/raw"
+
+/** Content type for raw sample messages. */
 #define RAW_CONTENT_TYPE      "application/ei-bus-f32"
+
+/** Topic for publishing classification results. */
 #define RESULT_TOPIC          "ei/result"
+
+/** Content type for result messages. */
 #define RESULT_CONTENT_TYPE   "text/plain"
 
-// --------------------------------------------------------------------------
-// Edge Impulse feature buffer & signal callback
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Edge Impulse Feature Buffer and Signal Callback
+ * ============================================================================ */
+
+/** Feature buffer for classifier input. */
 static float features[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE];
+
+/** Current position in feature buffer. */
 static size_t feature_ix = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
 
+/**
+ * Callback function for the Edge Impulse classifier to retrieve feature data.
+ *
+ * @param offset  Offset into the feature buffer
+ * @param length  Number of floats to copy
+ * @param out_ptr Output buffer for feature data
+ *
+ * @return 0 on success
+ */
 int get_feature_data(size_t offset, size_t length, float *out_ptr) {
     memcpy(out_ptr, features + offset, length * sizeof(float));
     return 0;
 }
 
+/* External classifier function declaration. */
 EI_IMPULSE_ERROR run_classifier(signal_t *, ei_impulse_result_t *, bool);
 
-// --------------------------------------------------------------------------
-// Forward declarations
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Forward Declarations
+ * ============================================================================ */
+
 static void message_handler(const char *topic,
                             const char *content_type,
                             const void *payload,
@@ -42,9 +77,18 @@ static void message_handler(const char *topic,
 
 static void publish_result(const ei_impulse_result_t *result);
 
-// --------------------------------------------------------------------------
-// WASM entry point
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Main Entry Point (WASM)
+ * ============================================================================ */
+
+/**
+ * Main entry point for the Edge Impulse classifier container.
+ *
+ * Initializes OCRE messaging, registers for incoming raw samples, and enters
+ * the event loop to process samples and publish results.
+ *
+ * @return 0 (never exits normal flow)
+ */
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0); // disable stdout buffering for logs
 
@@ -75,9 +119,26 @@ int main(void) {
     return 0;
 }
 
-// --------------------------------------------------------------------------
-// Message handler: run classifier on incoming raw float samples
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Message Handling and Classification
+ * ============================================================================ */
+
+/**
+ * Message callback handler for incoming raw sample messages.
+ *
+ * Validates the incoming message, extracts raw float samples, runs the
+ * classifier, and publishes the top-1 result for closed-loop validation.
+ *
+ * Expected message format:
+ *   - Topic: RAW_TOPIC ("ei/sample/raw")
+ *   - Content-Type: RAW_CONTENT_TYPE ("application/ei-bus-f32")
+ *   - Payload: Raw float array of size EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE
+ *
+ * @param topic        Message topic
+ * @param content_type Message content type
+ * @param payload      Pointer to message payload (float array)
+ * @param payload_len  Length of payload in bytes
+ */
 static void message_handler(const char *topic,
                             const char *content_type,
                             const void *payload,
@@ -87,9 +148,6 @@ static void message_handler(const char *topic,
         printf(LOG_PREFIX "Invalid message data received\n");
         return;
     }
-
-    // printf(LOG_PREFIX "Received message: topic=%s, content_type=%s, len=%u\n",
-        //    topic, content_type, payload_len);
 
     if (strcmp(topic, RAW_TOPIC) != 0) {
         printf(LOG_PREFIX "Ignoring message on unexpected topic '%s'\n", topic);
@@ -116,9 +174,7 @@ static void message_handler(const char *topic,
     size_t total_values = payload_len / sizeof(float);
     const float *src = (const float *)payload;
 
-    // ----------------------------------------------------------------------
-    // Map raw float samples into EI feature buffer
-    // ----------------------------------------------------------------------
+    /* Map raw float samples into EI feature buffer. */
     size_t num_needed = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
     size_t to_copy    = (total_values < num_needed) ? total_values : num_needed;
 
@@ -128,10 +184,7 @@ static void message_handler(const char *topic,
                (num_needed - to_copy) * sizeof(float));
     }
 
-    feature_ix = num_needed; // matches total_length of the signal
-
-    // printf(LOG_PREFIX "Running classifier on %zu features (received %zu floats)\n",
-        //    num_needed, total_values);
+    feature_ix = num_needed;
 
     signal_t signal;
     signal.total_length = feature_ix;
@@ -139,17 +192,13 @@ static void message_handler(const char *topic,
 
     ei_impulse_result_t result;
     EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false);
-    // printf(LOG_PREFIX "run_classifier returned: %d\n", res);
 
     if (res != EI_IMPULSE_OK) {
         printf(LOG_PREFIX "Classifier error: %d\n", res);
         return;
     }
 
-    // ----------------------------------------------------------------------
-    // Print predictions (same format as original single-shot app)
-    // ----------------------------------------------------------------------
-    // printf(LOG_PREFIX "Begin output\n");
+    /* Output detailed classification scores in array format. */
     printf(LOG_PREFIX "[");
 
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
@@ -167,17 +216,23 @@ static void message_handler(const char *topic,
     printf("%.3f", result.anomaly);
 #endif
     printf("]\n");
-    // printf(LOG_PREFIX "End output\n");
 
-    // ----------------------------------------------------------------------
-    // Publish a simple top-1 result for closed-loop driver
-    // ----------------------------------------------------------------------
+    /* Publish top-1 result for closed-loop validation. */
     publish_result(&result);
 }
 
-// --------------------------------------------------------------------------
-// Publish top-1 classification result as a simple text message
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * Result Publishing
+ * ============================================================================ */
+
+/**
+ * Publish the top-1 classification result to the OCRE messaging bus.
+ *
+ * Extracts the highest-confidence classification and publishes it in a
+ * simple text format: "label=<name> score=<confidence>"
+ *
+ * @param result Pointer to the classifier result structure
+ */
 static void publish_result(const ei_impulse_result_t *result)
 {
     if (!result) {
@@ -187,6 +242,7 @@ static void publish_result(const ei_impulse_result_t *result)
     const char *top_label = NULL;
     float top_score = -1.0f;
 
+    /* Find the highest-confidence classification. */
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
         if (result->classification[ix].value > top_score) {
             top_score = result->classification[ix].value;
@@ -199,6 +255,7 @@ static void publish_result(const ei_impulse_result_t *result)
         return;
     }
 
+    /* Format and publish the result. */
     char payload[128];
     int n = snprintf(payload, sizeof(payload),
                      "label=%s score=%.5f", top_label, top_score);
@@ -210,7 +267,7 @@ static void publish_result(const ei_impulse_result_t *result)
     int ret = ocre_publish_message(RESULT_TOPIC,
                                    RESULT_CONTENT_TYPE,
                                    payload,
-                                   (uint32_t)(n + 1)); // include NUL
+                                   (uint32_t)(n + 1));
     if (ret == OCRE_SUCCESS) {
         printf(LOG_PREFIX "Published result: %s on topic %s\n", payload, RESULT_TOPIC);
     } else {

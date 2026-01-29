@@ -1,23 +1,22 @@
-// container-data/main.c
-//
-// CBOR sample publisher for Edge Impulse motion classifier.
-//
-// Closed-loop version:
-//  - Scans a directory for Edge Impulse *.cbor* files
-//  - For each file, decodes the CBOR (see ei_cbor_decoder.c / ei_cbor_decoder.h)
-//    into a structured sample.
-//  - Takes the payload.values array (float samples) and slices each long
-//    sample into classifier-sized windows using either random or deterministic
-//    (evenly spaced) start positions.
-//  - For each window:
-//        * publish to the internal OCRE bus on EI_BUS_TOPIC
-//        * wait for a result message on EI_RESULT_TOPIC
-//        * compare predicted label with expected label for the sample
-//  - Uses classifier results to trigger the next window (no fixed time delay
-//    between windows, aside from a small polling delay while waiting).
+/*
+ * CBOR Sample Publisher for Edge Impulse Motion Classifier
+ *
+ * This module implements a closed-loop test data publisher that:
+ *  1. Scans a directory for Edge Impulse CBOR-encoded samples
+ *  2. Decodes each CBOR file into a structured sample
+ *  3. Slices samples into classifier-sized windows using configurable selection
+ *     modes (random or evenly-spaced deterministic)
+ *  4. Publishes each window to the OCRE messaging bus
+ *  5. Waits for and validates classifier results against expected labels
+ *  6. Reports overall accuracy statistics
+ *
+ * See ei_cbor_decoder.h for CBOR decoding details and model_metadata.h for
+ * classifier configuration parameters.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -35,67 +34,99 @@
 #define LOG_PREFIX "[DATA] "
 #endif
 
-// -----------------------------------------------------------------------------
-// Configuration
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * Configuration Constants
+ * ============================================================================ */
 
-// Directory containing CBOR samples. You can override this at runtime via argv[1].
+/**
+ * Directory containing CBOR sample files.
+ */
 #define DEFAULT_SAMPLE_DIR          "testing"
 
-// Number of classifier-sized windows to generate per CBOR file.
-// If CHUNKS_PER_SAMPLE > number of available windows, it will be clamped.
+/**
+ * Number of classifier-sized windows to generate per CBOR file.
+ * If CHUNKS_PER_SAMPLE exceeds the number of available windows, it is clamped
+ * to the maximum available.
+ */
 #define CHUNKS_PER_SAMPLE           3
 
-// Number of axes in the raw data (e.g. accelerometer X/Y/Z = 3).
-// This should match the impulse's sensor configuration.
+/**
+ * Number of axes in raw sensor data (e.g., accelerometer: X/Y/Z = 3).
+ * Must match the impulse's sensor configuration.
+ */
 #define N_AXES                      3
 
-// Topic + content-type used on the internal bus (must match classifier container).
+/**
+ * OCRE messaging bus topic and content type for raw samples.
+ * Must match the classifier container.
+ */
 #define EI_BUS_TOPIC                "ei/sample/raw"
 #define EI_BUS_CONTENT_TYPE         "application/ei-bus-f32"
 
-// Classifier result topic / content-type (must match classifier container).
+/**
+ * OCRE messaging bus topic and content type for inference results.
+ * Must match the classifier container.
+ */
 #define EI_RESULT_TOPIC             "ei/result"
 #define EI_RESULT_CONTENT_TYPE      "text/plain"
 
-// Window selection mode:
-//   1 = Randomized start positions (non-deterministic, seeded with time())
-//   2 = Deterministic, evenly spaced start positions over all valid windows
+/**
+ * Window selection mode options:
+ *   WINDOW_MODE_RANDOM        - Randomized start positions (non-deterministic)
+ *   WINDOW_MODE_DETERMINISTIC - Evenly-spaced positions (reproducible)
+ *
+ * Set WINDOW_SELECTION_MODE to one of the above values.
+ */
 #define WINDOW_MODE_RANDOM          1
 #define WINDOW_MODE_DETERMINISTIC   2
 #define WINDOW_SELECTION_MODE       WINDOW_MODE_RANDOM
 
-// Timeout waiting for a classifier result (ms)
+/**
+ * Result message polling configuration.
+ * RESULT_TIMEOUT_MS: Maximum time to wait for a classifier result (milliseconds)
+ * RESULT_POLL_INTERVAL_MS: Interval between poll attempts (milliseconds)
+ */
 #define RESULT_TIMEOUT_MS           5000
 #define RESULT_POLL_INTERVAL_MS     10
 
-// -----------------------------------------------------------------------------
-// Global state for closed-loop result handling
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * Global State for Closed-Loop Result Handling
+ * ============================================================================ */
 
+/** Flag indicating that we are waiting for a classifier result. */
 static volatile bool g_waiting_for_result = false;
+
+/** Flag indicating that a classifier result has been received. */
 static volatile bool g_result_received    = false;
 
+/** Last received classifier result label. */
 static char  g_last_result_label[64];
+
+/** Last received classifier result confidence score. */
 static float g_last_result_score = 0.0f;
 
-// Simple stats
+/** Total number of windows processed. */
 static size_t g_total_windows   = 0;
+
+/** Number of windows with correct predictions. */
 static size_t g_correct_windows = 0;
 
-// -----------------------------------------------------------------------------
-// Result parsing and callback
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * Result Parsing and Callback Handling
+ * ============================================================================ */
 
 /**
  * Extract the expected label from the CBOR filename.
  *
- * Assumes filenames like:
- *   testing/idle.1.cbor.XXXX.cbor
- *   testing/snake.1.cbor.XXXX.cbor
+ * Filename format expected:
+ *   <directory>/<label>.<index>.cbor[.<id>].cbor
  *
- * We take the basename (after last '/') and then everything up to the first
- * '.' as the label ("idle", "snake", etc.).
+ * The label is extracted as everything from the start of the filename up to
+ * the first '.' character.
+ *
+ * @param path        Full or relative path to the CBOR file
+ * @param label_out   Output buffer for the extracted label
+ * @param max_len     Maximum length of label_out (including null terminator)
  */
 static void extract_expected_label_from_path(const char *path,
                                              char *label_out,
@@ -125,9 +156,13 @@ static void extract_expected_label_from_path(const char *path,
 }
 
 /**
- * Callback for classifier results published on EI_RESULT_TOPIC.
+ * Callback for classifier result messages.
  *
- * Expects payload of the form:
+ * Processes result messages published on EI_RESULT_TOPIC and extracts the
+ * predicted label and confidence score. Updates global state and signals
+ * completion of the result wait.
+ *
+ * Expected payload format:
  *   "label=<name> score=<float>"
  */
 static void result_message_handler(const char *topic,
@@ -176,35 +211,25 @@ static void result_message_handler(const char *topic,
            g_last_result_label, g_last_result_score);
 }
 
-// -----------------------------------------------------------------------------
-// OCRE messaging bus publishing helpers
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * OCRE Messaging Bus Publishing Helpers
+ * ============================================================================ */
 
+/**
+ * Publish a single classifier-sized window to the OCRE messaging bus.
+ *
+ * @param sample_name   Name/path of the source sample file
+ * @param window_index  Index of the window within the sample
+ * @param window_data   Pointer to raw float data (window_len floats)
+ * @param window_len    Number of floats in window_data
+ */
 static void publish_window(const char *sample_name,
                            size_t window_index,
                            const float *window_data,
                            size_t window_len)
 {
-    // Debug logging
-    // printf(LOG_PREFIX "Publishing sample '%s' window %u (len=%u floats) to %s\n",
-    //        sample_name,
-    //        (unsigned)window_index,
-    //        (unsigned)window_len,
-    //        EI_BUS_TOPIC);
-
-    // Print sample name prior to publishing (per earlier requirement)
     printf(LOG_PREFIX "Publish window %u of sample \"%s\"\n",
            (unsigned)window_index, sample_name);
-
-    // Debug logging
-    // printf(LOG_PREFIX "Data: [");
-    // for (int i = 0; i < (int)window_len; i++) {
-    //     printf("%.5f", window_data[i]);
-    //     if (i != (int)(window_len - 1)) {
-    //         printf(", ");
-    //     }
-    // }
-    // printf("]\n");
 
     uint32_t payload_bytes = (uint32_t)(window_len * sizeof(float));
 
@@ -221,7 +246,19 @@ static void publish_window(const char *sample_name,
 
 /**
  * Publish one window and wait for the classifier to respond.
- * Returns true if we got a result and the predicted label matches expected_label.
+ *
+ * This function implements the closed-loop testing: it sends a sample window
+ * to the classifier, waits for a result, and validates the predicted label
+ * against the expected label. Statistics are updated for tracking overall
+ * accuracy.
+ *
+ * @param sample_name    Name/path of the source sample
+ * @param expected_label Expected class label from the sample filename
+ * @param window_index   Index of this window within the sample
+ * @param window_data    Pointer to raw float data
+ * @param window_len     Number of floats in window_data
+ *
+ * @return true if the prediction matched the expected label, false otherwise
  */
 static bool send_window_and_wait_for_result(const char *sample_name,
                                             const char *expected_label,
@@ -268,10 +305,24 @@ static bool send_window_and_wait_for_result(const char *sample_name,
     return match;
 }
 
-// -----------------------------------------------------------------------------
-// Window / chunk generation
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * Window/Chunk Generation
+ * ============================================================================ */
 
+/**
+ * Generate and publish classifier-sized windows from a single CBOR sample.
+ *
+ * This function:
+ *  1. Validates the sample has the expected number of axes
+ *  2. Determines available windows based on sample length and classifier window size
+ *  3. Selects windows using the configured mode (random or deterministic)
+ *  4. Publishes each window and waits for classifier result
+ *
+ * @param sample_name     Name/path of the source sample file
+ * @param expected_label  Expected class label from the sample filename
+ * @param raw             Pointer to raw float sample data
+ * @param total_floats    Total number of floats in the raw data
+ */
 static void publish_windows_for_sample(const char *sample_name,
                                        const char *expected_label,
                                        const float *raw,
@@ -313,16 +364,6 @@ static void publish_windows_for_sample(const char *sample_name,
     const size_t chunks_to_emit    =
         (CHUNKS_PER_SAMPLE < available_windows) ? CHUNKS_PER_SAMPLE : available_windows;
 
-    // Debug logging
-    // printf(LOG_PREFIX
-    //        "Sample %s: %u frames, window_frames=%u -> %u possible windows, emitting %u\n",
-    //        sample_name,
-    //        (unsigned)n_frames,
-    //        (unsigned)window_frames,
-    //        (unsigned)available_windows,
-    //        (unsigned)chunks_to_emit);
-    // printf(LOG_PREFIX "  expected label: '%s'\n", expected_label);
-
     if (chunks_to_emit == 0) {
         return;
     }
@@ -334,10 +375,10 @@ static void publish_windows_for_sample(const char *sample_name,
     }
 
 #if WINDOW_SELECTION_MODE == WINDOW_MODE_RANDOM
-    // ------------------------ Random selection -------------------------------
-    //
-    // Pick CHUNKS_PER_SAMPLE distinct start positions uniformly over the
-    // available windows via a partial Fisher–Yates shuffle.
+    /*
+     * Random Selection: Pick CHUNKS_PER_SAMPLE distinct start positions
+     * uniformly over available windows via a partial Fisher–Yates shuffle.
+     */
 
     size_t *all_starts = (size_t *)malloc(available_windows * sizeof(size_t));
     if (!all_starts) {
@@ -363,12 +404,11 @@ static void publish_windows_for_sample(const char *sample_name,
     }
 
     free(all_starts);
-
 #elif WINDOW_SELECTION_MODE == WINDOW_MODE_DETERMINISTIC
-    // ------------------------ Deterministic selection -----------------------
-    //
-    // Even spacing over [0..max_start]. This is reproducible and provides
-    // good coverage regardless of sample length.
+    /*
+     * Deterministic Selection: Even spacing over [0..max_start].
+     * This is reproducible and provides good coverage regardless of sample length.
+     */
     if (chunks_to_emit == 1) {
         start_frames[0] = max_start / 2;
     } else {
@@ -401,16 +441,12 @@ static void publish_windows_for_sample(const char *sample_name,
             continue;
         }
 
-        // Debug logging
-        // printf(LOG_PREFIX "  Window %u: start_frame=%u\n",
-        //        (unsigned)w, (unsigned)start_frame);
-
-        // Copy one full window: window_frames * n_axes floats.
+        /* Copy one full window: window_frames * n_axes floats. */
         memcpy(window_buf,
                raw + start_index,
                window_floats * sizeof(float));
 
-        // Closed-loop: send window and wait for classifier result
+        /* Send window to classifier and wait for result. */
         (void)send_window_and_wait_for_result(sample_name,
                                               expected_label,
                                               w,
@@ -421,15 +457,28 @@ static void publish_windows_for_sample(const char *sample_name,
     free(start_frames);
 }
 
-// -----------------------------------------------------------------------------
-// Directory scanning
-// -----------------------------------------------------------------------------
+/* ============================================================================
+ * Directory Scanning
+ * ============================================================================ */
 
+/**
+ * Check if filename contains the ".cbor" substring.
+ *
+ * @param name  Filename to check
+ * @return true if ".cbor" is found in the filename, false otherwise
+ */
 static bool has_cbor_substring(const char *name)
 {
     return strstr(name, ".cbor") != NULL;
 }
 
+/**
+ * Check if a path refers to a regular file (not a directory or special file).
+ *
+ * @param dir   Directory path containing the file
+ * @param name  Filename to check
+ * @return true if path is a regular file, false otherwise
+ */
 static bool is_regular_file(const char *dir, const char *name)
 {
     char path[512];
@@ -447,12 +496,20 @@ static bool is_regular_file(const char *dir, const char *name)
 }
 
 /**
- * Scan a directory for files whose names contain ".cbor".
+ * Scan a directory for files matching the CBOR naming pattern.
  *
- * On success:
- *   - *out_files receives a heap-allocated array of char* paths (relative to dir)
- *   - *out_count is the number of entries
- *   - Caller must free each element of out_files[i] and then free(out_files).
+ * Discovers all regular files in the specified directory whose names contain
+ * the ".cbor" substring. Results are allocated on the heap and must be freed
+ * by the caller.
+ *
+ * @param dir        Directory path to scan
+ * @param out_files  Output: pointer to heap-allocated array of file paths.
+ *                   Each path is relative to dir. Caller must free each element
+ *                   and then free the array itself.
+ * @param out_count  Output: number of files discovered
+ *
+ * @return true on success with valid files found, false if directory cannot
+ *         be opened or no CBOR files are found
  */
 static bool scan_cbor_files(const char *dir,
                             char ***out_files,
@@ -639,7 +696,7 @@ int main(int argc, char **argv)
 
     printf(LOG_PREFIX "Found %u CBOR files\n", (unsigned)num_files);
 
-    // Iterate over all discovered files and publish windows in closed-loop.
+    /* Process each file in closed-loop fashion. */
     for (size_t i = 0; i < num_files; i++) {
         process_file(files[i]);
         free(files[i]);
