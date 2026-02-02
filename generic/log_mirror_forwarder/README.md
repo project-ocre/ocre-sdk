@@ -29,7 +29,7 @@ target device.
     ```
 
 ## Container Setup
-1. Make sure directories exist in the root dir of where the Atym runtime exists:
+1. Make sure directories exist in the root dir of where the runtime exists:
     - `ocre/cfs/log`
     - `ocre/cfs/web`
 2. Copy `index.html` from repository into `ocre/cfs/web/index.html` (we do not yet have
@@ -39,7 +39,7 @@ target device.
     ```bash
     sudo journalctl -f -o short-iso > ocre/cfs/log/syslog
     ```
-4. Deploy the container using `atym run`
+4. Deploy the container
 5. Open webpage at port 8000
 6. Connect to MQTT broker in web interface using IP and port
 
