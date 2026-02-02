@@ -24,12 +24,12 @@ add_link_options(
     -z stack-size=8192
 )
 
-# Add the atym-sdk as a subdirectory and build it
+# Add the ocre-sdk as a subdirectory and build it
 set(OCRE_SDK_PATH "../../ocre-sdk")
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${OCRE_SDK_PATH}/CMakeLists.txt")
     message(FATAL_ERROR "ocre-sdk not found at ${OCRE_SDK_PATH}. Please ensure the ocre-sdk directory exists and contains CMakeLists.txt")
 endif()
-add_subdirectory(${OCRE_SDK_PATH} atym-sdk-build)
+add_subdirectory(${OCRE_SDK_PATH} ocre-sdk-build)
 
 add_executable(${APPNAME}.wasm main.c mongoose.c)
 
