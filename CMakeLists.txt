@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.20.0)
 
 # Set the WASI SDK toolchain file
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-pthread.cmake)
+set(CMAKE_TOOLCHAIN_FILE scripts/wasm32-wasi-pthread.cmake)
 
 set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
