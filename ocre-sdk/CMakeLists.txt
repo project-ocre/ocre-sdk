@@ -1,9 +1,22 @@
 cmake_minimum_required(VERSION 3.20.0)
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk.cmake)
-project(ocre_api LANGUAGES C)
 
+set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/../scripts/wasm32-wasi-pthread.cmake)
+
+project(ocre-sdk)
+
+set(CMAKE_VERBOSE_MAKEFILE TRUE)
+
+if (NOT WAMR_ROOT)
+    set(WAMR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../wasm-micro-runtime")
+endif()
+
+# WAMR Sockets lib
+add_library(socket_wasi_ext STATIC ${WAMR_ROOT}/core/iwasm/libraries/lib-socket/src/wasi/wasi_socket_ext.c)
+target_include_directories(socket_wasi_ext PUBLIC ${WAMR_ROOT}/core/iwasm/libraries/lib-socket/inc)
+install(TARGETS socket_wasi_ext DESTINATION ${WASI_SYSROOT}/lib/${triple})
+install(FILES ${WAMR_ROOT}/core/iwasm/libraries/lib-socket/inc/wasi_socket_ext.h DESTINATION ${WASI_SYSROOT}/include/${triple}/)
+
+# Ocre API
 add_library(ocre_api STATIC ocre_api.c)
-target_include_directories(ocre_api PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(ocre_api PRIVATE -O3 -Wall -Wextra -Wno-unused-parameter -Wno-unknown-attributes)
-install(TARGETS ocre_api ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(FILES ocre_api.h DESTINATION include)
+install(TARGETS ocre_api DESTINATION ${WASI_SYSROOT}/lib/${triple})
+install(FILES ocre_api.h DESTINATION ${WASI_SYSROOT}/include/${triple})
