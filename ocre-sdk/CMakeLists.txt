@@ -10,6 +10,8 @@ if (NOT WAMR_ROOT)
     set(WAMR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../wasm-micro-runtime")
 endif()
 
+message(STATUS "Using WAMR ROOT: ${WAMR_ROOT}")
+
 # WAMR Sockets lib
 add_library(socket_wasi_ext STATIC ${WAMR_ROOT}/core/iwasm/libraries/lib-socket/src/wasi/wasi_socket_ext.c)
 target_include_directories(socket_wasi_ext PUBLIC ${WAMR_ROOT}/core/iwasm/libraries/lib-socket/inc)
