@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.20.0)
 
-# Set the WASI SDK toolchain file 
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk.cmake)
+# Set the WASI SDK toolchain file
+include(${CMAKE_CURRENT_LIST_DIR}/../../ocre.cmake)
 
-# Set the project name (needs to come after the toolchain file) 
+# Set the project name (needs to come after the toolchain file)
 set(APPNAME blinky-h7)
 project(${APPNAME})
 
-# Set the linker flags 
+# Set the linker flags
 set(CMAKE_EXE_LINKER_FLAGS "-Wl,--strip-all -Wl,--allow-undefined")
 
 # Set compilation flags

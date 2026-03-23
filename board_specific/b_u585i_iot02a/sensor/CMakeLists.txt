@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../ocre.cmake)
 set(APPNAME sensor)
 project(${APPNAME} LANGUAGES C)
 

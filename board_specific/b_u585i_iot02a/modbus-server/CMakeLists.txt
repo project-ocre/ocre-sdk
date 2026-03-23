@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.20.0)
 
 # Set the WASI SDK toolchain file
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-p1.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../ocre.cmake)
 
 set(CMAKE_BUILD_TYPE Release)
 
