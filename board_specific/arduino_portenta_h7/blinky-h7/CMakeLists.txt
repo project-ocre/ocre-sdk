@@ -1,23 +1,14 @@
-cmake_minimum_required(VERSION 3.20.0)
+cmake_minimum_required (VERSION 3.20.0)
 
-# Set the WASI SDK toolchain file
-include(${CMAKE_CURRENT_LIST_DIR}/../../ocre.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../../ocre.cmake)
 
-# Set the project name (needs to come after the toolchain file)
-set(APPNAME blinky-h7)
-project(${APPNAME})
+project(blinky-h7)
 
-# Set the linker flags
-set(CMAKE_EXE_LINKER_FLAGS "-Wl,--strip-all -Wl,--allow-undefined")
+add_executable(blinky-h7.wasm main.c)
 
-# Set compilation flags
-add_compile_options(
-    -O0 -Wno-unknown-attributes
-    -O3
-    -Wall
-    -Wextra
-    -Wno-unused-parameter
+add_subdirectory(../../../ocre-sdk ocre-sdk)
+
+target_link_libraries(blinky-h7.wasm
+    PUBLIC
+    ocre_api
 )
-
-# Create the executable target
-add_executable(${APPNAME}.wasm main.c)
