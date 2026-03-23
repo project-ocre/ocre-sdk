@@ -171,6 +171,7 @@ void ocre_process_events(void)
             printf("Unknown event: type=%d, id=%d, port=%d, state=%d\n",
                    event_data.type, event_data.id, event_data.port, event_data.state);
 #endif
+            break;
         }
         event_count++;
     }
