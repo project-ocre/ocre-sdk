@@ -1,0 +1,43 @@
+# @copyright Copyright (c) contributors to Project Ocre,
+# which has been established as Project Ocre a Series of LF Projects, LLC
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Build Samples
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      devcontainer-tag:
+        description: "Devcontainer tag"
+        required: false
+        default: "latest"
+        type: string
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}@build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Samples
+    runs-on: "ubuntu-22.04"
+    container:
+      image: ghcr.io/project-ocre/ocre-runtime/devcontainer-linux:${{ inputs.devcontainer-tag || 'latest'}}
+      options: --user 1001:127
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Configure
+        run: |
+          mkdir build && cd build
+          cmake ..
+          make

@@ -1,6 +1,8 @@
 # Build directories
 **/build/
 
+sysroot/
+
 # VSCode
 .vscode/*
 *.code-workspace

@@ -1,95 +1,149 @@
 cmake_minimum_required (VERSION 3.20.0)
 
-# Set the WASI SDK toolchain file
-set(CMAKE_TOOLCHAIN_FILE /opt/wasi-sdk/share/cmake/wasi-sdk-pthread.cmake)
+project(ocre-sdk)
 
 set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
-project(OcreSdkSamples)
+include(ExternalProject)
 
-# Set the linker flags
-set(CMAKE_EXE_LINKER_FLAGS "-Wl,--strip-all -Wl,--allow-undefined -Wl,--max-memory=1048576")
+make_directory(${CMAKE_CURRENT_BINARY_DIR}/dist)
 
-# Set compilation flags
-add_compile_options(
-    -O0 -Wno-unknown-attributes
-    -O3
-    -Wall
-    -Wextra
-    -Wno-unused-parameter
+ExternalProject_Add(big-sample
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/big-sample
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp big-sample.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-if(NOT WAMR_ROOT_DIR)
-    set(WAMR_ROOT_DIR "wasm-micro-runtime")
-endif()
-
-include(${WAMR_ROOT_DIR}/core/iwasm/libraries/lib-socket/lib_socket_wasi.cmake)
-
-add_subdirectory(ocre-sdk)
-
-# Create the executable targets
-add_executable("hello-world.wasm" generic/hello-world/main.c)
-
-add_executable("blinky.wasm" generic/blinky/main.c)
-
-# Include + link the Ocre API and WAMR socket library
-target_include_directories("blinky.wasm" PRIVATE
-    ocre_api
+ExternalProject_Add(blinky
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/blinky
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp blinky.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("blinky.wasm" ocre_api)
-
-add_executable("publisher.wasm" generic/messaging/publisher/main.c)
-
-target_include_directories("publisher.wasm" PRIVATE
-    ocre_api
+ExternalProject_Add(blinky-board-generic
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/blinky-board-generic
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp blinky-board-generic.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("publisher.wasm" ocre_api)
-
-add_executable("subscriber.wasm" generic/messaging/subscriber/main.c)
-
-target_include_directories("subscriber.wasm" PRIVATE
-    ocre_api
+ExternalProject_Add(echo-server
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/echo-server
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp echo-server.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("subscriber.wasm" ocre_api)
-
-add_executable("filesystem.wasm" generic/filesystem/main.c)
-
-target_include_directories("filesystem.wasm" PRIVATE
-    ocre_api
+ExternalProject_Add(filesystem
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/filesystem
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp filesystem.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("filesystem.wasm" ocre_api)
-
-add_executable("filesystem-full.wasm" generic/filesystem-full/main.c)
-
-target_include_directories("filesystem-full.wasm" PRIVATE
-    ocre_api
+ExternalProject_Add(filesystem-full
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/filesystem-full
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp filesystem-full.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("filesystem-full.wasm" ocre_api)
-
-add_executable("webserver.wasm" generic/webserver/main.c generic/webserver/mongoose.c)
-
-target_include_directories("webserver.wasm" PRIVATE
-    ${WAMR_ROOT_DIR}/core/iwasm/libraries/lib-socket
-    ocre_api
+ExternalProject_Add(hello-world
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/hello-world
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp hello-world.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("webserver.wasm" socket_wasi_ext ocre_api)
-
-add_executable("webserver-complex.wasm" generic/webserver-complex/main.c generic/webserver-complex/mongoose.c)
-
-target_include_directories("webserver-complex.wasm" PRIVATE
-    ${WAMR_ROOT_DIR}/core/iwasm/libraries/lib-socket
-    ocre_api
+ExternalProject_Add(log_mirror_forwarder
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/log_mirror_forwarder
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp syslog_webserver.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
 )
 
-target_link_libraries("webserver-complex.wasm" socket_wasi_ext ocre_api)
+ExternalProject_Add(publisher
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/messaging/publisher
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp publisher.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
 
-add_executable("return0.wasm" testing/return0.c)
-add_executable("return1.wasm" testing/return1.c)
-add_executable("sleep_5_return_0.wasm" testing/sleep_5_return_0.c)
-add_executable("pthread.wasm" testing/pthread.c)
+ExternalProject_Add(subscriber
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/messaging/subscriber
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp subscriber.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(publisher_inside
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/messaging/multipublisher-subscriber/publisher_inside
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp publisher_inside.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(publisher_outside
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/messaging/multipublisher-subscriber/publisher_outside
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp publisher_outside.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(subscriber_temp
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/messaging/multipublisher-subscriber/subscriber_temp
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp subscriber_temp.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(modbus-client
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/modbus-client
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp modbus-client.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(shared-filesystem-reader
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/shared-filesystem/shared-filesystem-reader
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp shared-filesystem-reader.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(shared-filesystem-writer
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/shared-filesystem/shared-filesystem-writer
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp shared-filesystem-writer.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(webserver
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/webserver
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp webserver.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(webserver-complex
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/generic/webserver-complex
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp webserver-complex.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+# Testing
+
+ExternalProject_Add(print_args
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/testing/print_args
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp print_args.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(pthread
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/testing/pthread
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp pthread.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(return0
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/testing/return0
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp return0.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(return1
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/testing/return1
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp return1.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
+
+ExternalProject_Add(sleep5_return0
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/testing/sleep5_return0
+  CMAKE_ARGS "-DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}" "-DWAMR_ROOT:STRING=${WAMR_ROOT}"
+  INSTALL_COMMAND cp sleep5_return0.wasm ${CMAKE_CURRENT_BINARY_DIR}/dist
+)
